@@ -754,7 +754,7 @@
         </div>
         <div class="panel-body" style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="sync-btn" onclick="showView('assets', document.querySelectorAll('.nav-tab')[1])">+ Add asset</button>
-          <button class="sync-btn" id="quick-add-mileage" disabled>+ Add mileage reading</button>
+          <button class="sync-btn" id="quick-add-mileage" onclick="openMileageModal(null)">+ Add mileage reading</button>
         </div>
       </div>
     </div>
@@ -967,6 +967,54 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
       <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MILEAGE READING MODAL -->
+<div class="modal-overlay" id="mileage-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2 id="mileage-modal-title">Add reading</h2>
+      <button onclick="closeMileageModal()" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <p class="modal-subtitle" id="mileage-modal-subtitle">Enter the current odometer or hours reading.</p>
+    <div class="field">
+      <label>Asset</label>
+      <select id="mm-asset" onchange="updateMileageModalAsset()"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label id="mm-value-label">Reading</label>
+        <input type="number" id="mm-value" placeholder="0" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="mm-date" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Source</label>
+      <select id="mm-source">
+        <option value="manual">Manual entry</option>
+        <option value="mot-certificate">MOT certificate</option>
+        <option value="service-invoice">Service invoice</option>
+        <option value="derived">Derived</option>
+      </select>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="mm-estimate" style="width:auto;margin:0;" />
+        <span>Mark as estimate</span>
+      </label>
+    </div>
+    <div class="field">
+      <label>Notes <span class="opt">optional</span></label>
+      <input type="text" id="mm-notes" placeholder="e.g. pre-service check" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMileageModal()">Cancel</button>
+      <button class="btn-save" onclick="saveMileageReading()">Save reading</button>
     </div>
   </div>
 </div>
@@ -1584,13 +1632,14 @@ function openAssetDetail(assetId) {
     </tr>`;
   }).join('') : '<tr><td colspan="4" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No compliance records</td></tr>';
 
-  const readingRows = readings.slice(0, 5).map(m =>
+  const readingRows = readings.slice(0, 12).map(m =>
     `<tr>
       <td style="font-family:var(--mono);font-size:12px;">${m.date}</td>
       <td style="font-family:var(--mono);font-size:12px;">${m.value.toLocaleString('en-GB')} ${unit}${isKm ? ' <span style="color:var(--text-dim)">(' + kmToMiles(m.value).toLocaleString('en-GB') + ' mi)</span>' : ''}${m.isEstimate ? ' <span style="color:var(--text-dim)">(est.)</span>' : ''}</td>
-      <td style="color:var(--text-sec);font-size:12px;">${m.source || 'manual'}</td>
+      <td style="color:var(--text-sec);font-size:12px;">${{ manual:'Manual', 'mot-certificate':'MOT cert', 'service-invoice':'Service invoice', derived:'Derived' }[m.source] || m.source || 'Manual'}</td>
+      <td style="text-align:right;"></td>
     </tr>`
-  ).join('') || '<tr><td colspan="3" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No readings yet</td></tr>';
+  ).join('') || '<tr><td colspan="4" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No readings yet</td></tr>';
 
   document.getElementById('asset-detail-content').innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
@@ -1683,14 +1732,16 @@ function openAssetDetail(assetId) {
     <div class="panel" style="margin-bottom:1.25rem;">
       <div class="panel-header">
         <span class="panel-title">Mileage &amp; hours</span>
-        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="alert('Mileage logging arrives in WP5.')">+ Add reading</button>
+        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="openMileageModal('${asset.id}')">+ Add reading</button>
       </div>
+      ${readings.length >= 2 ? `<div style="padding:12px 16px 4px;"><canvas id="mileage-sparkline" height="60" style="width:100%;display:block;"></canvas></div>` : ''}
       <div style="overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead><tr style="background:var(--navy);">
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Date</th>
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Reading</th>
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Source</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);"></th>
           </tr></thead>
           <tbody>${readingRows}</tbody>
         </table>
@@ -1719,6 +1770,11 @@ function openAssetDetail(assetId) {
   });
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
   document.getElementById('view-asset-detail').style.display = 'block';
+
+  // Draw sparkline if enough readings
+  if (readings.length >= 2) {
+    requestAnimationFrame(() => drawSparkline('mileage-sparkline', readings.slice(0, 12).reverse()));
+  }
 }
 
 function closeAssetDetail() {
@@ -1915,6 +1971,161 @@ function saveAsset() {
   toast(editAssetId ? 'Asset updated.' : 'Asset added.');
 }
 
+// ── Mileage modal ────────────────────────────────────────────────────────────
+let mileageModalAssetId = null;
+
+function openMileageModal(assetId) {
+  mileageModalAssetId = assetId;
+
+  // Populate asset selector
+  const sel = document.getElementById('mm-asset');
+  sel.innerHTML = state.assets.map(a =>
+    `<option value="${a.id}" ${a.id === assetId ? 'selected' : ''}>${a.name}</option>`
+  ).join('');
+
+  // Set defaults
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('mm-date').value    = today;
+  document.getElementById('mm-value').value   = '';
+  document.getElementById('mm-notes').value   = '';
+  document.getElementById('mm-source').value  = 'manual';
+
+  updateMileageModalAsset();
+  document.getElementById('mileage-modal').classList.add('open');
+  setTimeout(() => document.getElementById('mm-value').focus(), 100);
+}
+
+function updateMileageModalAsset() {
+  const assetId = document.getElementById('mm-asset').value;
+  const asset   = state.assets.find(a => a.id === assetId);
+  if (!asset) return;
+
+  const unit = asset.usesHours ? 'Hours' : (asset.odometerUnit === 'km' ? 'Reading (km)' : 'Reading (miles)');
+  document.getElementById('mm-value-label').textContent = unit;
+  document.getElementById('mileage-modal-subtitle').textContent =
+    asset.usesHours ? 'Enter estimated hours for ' + asset.name + '.' : 'Enter the current odometer reading for ' + asset.name + '.';
+
+  // Default estimate to ticked for garden machinery
+  const gardenTypes = ['mower', 'strimmer', 'blower'];
+  document.getElementById('mm-estimate').checked = gardenTypes.includes(asset.assetType);
+}
+
+function closeMileageModal() {
+  document.getElementById('mileage-modal').classList.remove('open');
+  mileageModalAssetId = null;
+}
+
+function saveMileageReading() {
+  const assetId = document.getElementById('mm-asset').value;
+  const value   = parseFloat(document.getElementById('mm-value').value);
+  const date    = document.getElementById('mm-date').value;
+
+  if (!assetId)       { toast('Please select an asset.');        return; }
+  if (isNaN(value) || value < 0) { toast('Please enter a valid reading.'); return; }
+  if (!date)          { toast('Please enter a date.');           return; }
+
+  const reading = {
+    id:         'm' + Date.now(),
+    assetId,
+    date,
+    value,
+    source:     document.getElementById('mm-source').value,
+    isEstimate: document.getElementById('mm-estimate').checked,
+    notes:      document.getElementById('mm-notes').value.trim(),
+  };
+
+  state.mileageReadings.push(reading);
+  closeMileageModal();
+  saveToD();
+  render();
+
+  // If we were on an asset detail page, re-open it to show the new reading
+  const detailVisible = document.getElementById('view-asset-detail').style.display !== 'none';
+  if (detailVisible) openAssetDetail(assetId);
+
+  toast('Reading saved.');
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+function drawSparkline(canvasId, readings) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.offsetWidth;
+  const H      = 60;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  if (readings.length < 2) return;
+
+  const values = readings.map(r => r.value);
+  const minV   = Math.min(...values);
+  const maxV   = Math.max(...values);
+  const range  = maxV - minV || 1;
+
+  const pad  = { top: 6, bottom: 6, left: 4, right: 4 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  const xOf = i => pad.left + (i / (readings.length - 1)) * plotW;
+  const yOf = v => pad.top + plotH - ((v - minV) / range) * plotH;
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, pad.top, 0, H);
+  grad.addColorStop(0, 'rgba(46,111,196,0.25)');
+  grad.addColorStop(1, 'rgba(46,111,196,0)');
+
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), yOf(values[0]));
+  for (let i = 1; i < readings.length; i++) {
+    ctx.lineTo(xOf(i), yOf(values[i]));
+  }
+  ctx.lineTo(xOf(readings.length - 1), H);
+  ctx.lineTo(xOf(0), H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.moveTo(xOf(0), yOf(values[0]));
+  for (let i = 1; i < readings.length; i++) {
+    ctx.lineTo(xOf(i), yOf(values[i]));
+  }
+  ctx.strokeStyle = '#2e6fc4';
+  ctx.lineWidth   = 1.5;
+  ctx.lineJoin    = 'round';
+  ctx.stroke();
+
+  // Dots
+  readings.forEach((r, i) => {
+    const x = xOf(i), y = yOf(r.value);
+    ctx.beginPath();
+    ctx.arc(x, y, r.isEstimate ? 2.5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle   = r.isEstimate ? '#5d7494' : '#4a8fd9';
+    ctx.strokeStyle = '#080c14';
+    ctx.lineWidth   = 1.5;
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Latest value label
+  const last = readings[readings.length - 1];
+  const lx   = xOf(readings.length - 1);
+  const ly   = yOf(last.value);
+  ctx.font      = '9px "DM Mono", monospace';
+  ctx.fillStyle = '#dde8f2';
+  ctx.textAlign = 'right';
+  ctx.fillText(last.value.toLocaleString('en-GB'), lx - 6, ly + 3);
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 function openSettings() {
   document.getElementById('s-client-id').value     = cfg.clientId;
@@ -1985,7 +2196,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-['asset-modal', 'settings-modal'].forEach(id => {
+['asset-modal', 'settings-modal', 'mileage-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
 });
