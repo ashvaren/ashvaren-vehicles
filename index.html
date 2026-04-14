@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ashvaren — Vehicle Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy:         #080c14;
+    --navy-mid:     #0e1420;
+    --navy-2:       #131b2b;
+    --border:       #1e2a3d;
+    --muted:        #2e3f5c;
+    --text-dim:     #5d7494;
+    --text-sec:     #7a96b4;
+    --text:         #a8bdd4;
+    --text-hi:      #dde8f2;
+    --accent:       #2e6fc4;
+    --accent-hi:    #4a8fd9;
+    --accent-lo:    rgba(46,111,196,0.10);
+    --accent-mid:   rgba(46,111,196,0.22);
+    --gold:         #b89a5a;
+    --gold-lo:      rgba(184,154,90,0.12);
+    --green:        #3a9e74;
+    --green-bg:     rgba(58,158,116,0.12);
+    --amber:        #b8864a;
+    --amber-bg:     rgba(184,134,74,0.12);
+    --red:          #c0404a;
+    --red-bg:       rgba(192,64,74,0.12);
+    --purple:       #7b5dc4;
+    --purple-bg:    rgba(123,93,196,0.12);
+    --teal:         #3ab89a;
+    --teal-bg:      rgba(58,184,154,0.10);
+    --bg:           #080c14;
+    --surface:      #0e1420;
+    --surface-2:    #131b2b;
+    --shadow:       0 2px 12px rgba(0,0,0,0.4);
+    --radius:       10px;
+    --mono:         'DM Mono', monospace;
+    --display:      'Cormorant Garamond', Georgia, serif;
+    --sans:         'Jost', system-ui, sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    font-weight: 300;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.55;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Loading ── */
+  #loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    flex-direction: column;
+    gap: 16px;
+    background: var(--bg);
+  }
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 1.5px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Error banner ── */
+  #error-banner {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: #A32D2D;
+    color: #fff;
+    padding: 12px 16px;
+    font-size: 13px;
+    z-index: 9999;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  /* ── Auth screen ── */
+  #auth-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  .auth-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 2.5rem;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .auth-logo {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-hi);
+    margin-bottom: 4px;
+  }
+  .auth-tagline {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+  }
+  .auth-card h2 {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-hi);
+    margin-bottom: 8px;
+  }
+  .auth-card p {
+    font-size: 13px;
+    color: var(--text-sec);
+    margin-bottom: 1.5rem;
+    line-height: 1.65;
+  }
+  .config-section { text-align: left; margin-bottom: 1.25rem; }
+  .config-section label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 5px;
+  }
+  .config-section input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--sans);
+    color: var(--text-hi);
+    background: var(--navy);
+    outline: none;
+  }
+  .config-section input:focus { border-color: var(--accent); }
+  .config-section .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+  .btn-primary {
+    display: block;
+    width: 100%;
+    padding: 11px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: background 0.15s;
+    font-family: var(--sans);
+    letter-spacing: 0.03em;
+  }
+  .btn-primary:hover { background: var(--accent-hi); }
+  .auth-note {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 1rem;
+    line-height: 1.7;
+  }
+
+  /* ── App shell ── */
+  #app { display: none; min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--navy);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .header-left { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+  .logo {
+    font-family: var(--display);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-hi);
+    line-height: 1;
+  }
+  .logo-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .header-right { display: flex; align-items: center; gap: 6px; }
+  .sync-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sync-btn:hover { background: var(--accent-lo); border-color: var(--accent); color: var(--accent-hi); }
+  .sync-status { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+  /* ── Nav bar ── */
+  .nav-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+  }
+  .nav-tab {
+    padding: 13px 18px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--accent-hi); border-bottom-color: var(--accent); }
+
+  /* ── Main ── */
+  main { padding: 1.75rem 2rem; max-width: 1200px; }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .panel-body { padding: 8px 0; }
+
+  /* ── Filter pills ── */
+  .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .filter-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-pill:hover { border-color: var(--muted); color: var(--text); }
+  .filter-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Asset cards grid ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .asset-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .asset-card:hover { border-color: var(--muted); }
+  .asset-card-photo {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--navy-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .asset-card-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .asset-card-photo-placeholder {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 1rem;
+  }
+  .asset-card-body { padding: 1rem 1.1rem; flex: 1; display: flex; flex-direction: column; }
+  .asset-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+  .asset-name { font-size: 14px; font-weight: 500; color: var(--text-hi); line-height: 1.3; }
+  .asset-group { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+  .status-pill {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .s-road       { background: var(--green-bg);  color: var(--green); }
+  .s-sorn       { background: var(--amber-bg);  color: var(--amber); }
+  .s-project    { background: var(--purple-bg); color: var(--purple); }
+  .s-in-use     { background: var(--green-bg);  color: var(--green); }
+  .s-retired    { background: rgba(93,116,148,0.12); color: var(--text-dim); }
+  .s-stored     { background: rgba(93,116,148,0.12); color: var(--text-dim); }
+  .asset-meta { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+  .compliance-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .compliance-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .compliance-dot.ok     { background: var(--green); }
+  .compliance-dot.soon   { background: var(--amber); }
+  .compliance-dot.overdue{ background: var(--red); }
+  .compliance-dot.none   { background: var(--muted); }
+  .compliance-text { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .add-card {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    transition: all 0.15s;
+  }
+  .add-card:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-lo); }
+
+  /* ── Dashboard ── */
+  .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+  .compliance-alert-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .compliance-alert-item:last-child { border-bottom: none; }
+  .alert-asset { font-size: 13px; font-weight: 500; color: var(--text-hi); }
+  .alert-detail { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .alert-overdue { color: var(--red); }
+  .alert-soon    { color: var(--amber); }
+  .empty-state {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Compliance table ── */
+  .compliance-table { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .compliance-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .compliance-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--navy);
+  }
+  .compliance-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
+  .compliance-table tr:last-child td { border-bottom: none; }
+  .compliance-table tr:hover td { background: var(--surface-2); }
+
+  /* ── Modals ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 50px 1rem 2rem;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    overflow-y: auto;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.75rem;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    transform: translateY(-8px);
+    transition: transform 0.15s;
+    margin: auto;
+    flex-shrink: 0;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal h2 {
+    font-family: var(--display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-hi);
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+  }
+  .modal-subtitle { font-size: 13px; color: var(--text-sec); margin-bottom: 1rem; }
+  .field { margin-bottom: 12px; }
+  .field label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 5px;
+  }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: var(--sans);
+    color: var(--text-hi);
+    background: var(--navy);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .field select option { background: var(--surface); }
+  .field textarea { min-height: 64px; resize: vertical; }
+  .opt { font-size: 10px; color: var(--text-dim); font-weight: 400; margin-left: 4px; text-transform: none; letter-spacing: 0; }
+  .section-divider {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 1.25rem 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
+  .btn-cancel {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-sec);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--sans);
+    transition: all 0.15s;
+  }
+  .btn-cancel:hover { background: var(--surface-2); border-color: var(--muted); }
+  .btn-save {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.15s;
+  }
+  .btn-save:hover { background: var(--accent-hi); }
+  .btn-save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Phase placeholder panels ── */
+  .phase-placeholder {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+  .phase-placeholder-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .phase-placeholder p { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-hi);
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.2s;
+    pointer-events: none;
+    z-index: 300;
+    max-width: 320px;
+    line-height: 1.55;
+    box-shadow: var(--shadow);
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── Hamburger / mobile menu ── */
+  .hamburger-btn { display: none; }
+  .mobile-menu { display: none; }
+
+  /* ── Mobile responsive ── */
+  @media (max-width: 768px) {
+    header { padding: 0 1rem; height: 54px; }
+    .logo { font-size: 15px; }
+    .logo-tag { display: none; }
+    .header-right .sync-btn { display: none; }
+    .hamburger-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .mobile-menu {
+      display: none;
+      position: fixed;
+      top: 54px;
+      right: 0; left: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+      padding: 8px 0;
+      box-shadow: var(--shadow);
+    }
+    .mobile-menu.open { display: block; }
+    .mobile-menu-item {
+      display: block;
+      width: 100%;
+      padding: 13px 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-sec);
+      background: transparent;
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }
+    .mobile-menu-item:last-child { border-bottom: none; }
+    .mobile-menu-item:hover { background: var(--surface-2); color: var(--text-hi); }
+    .nav-bar { padding: 0 0.5rem; overflow-x: auto; scrollbar-width: none; }
+    .nav-bar::-webkit-scrollbar { display: none; }
+    .nav-tab { padding: 12px 14px; font-size: 10px; white-space: nowrap; }
+    main { padding: 1rem; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal { border-radius: 14px 14px 0 0; max-height: 92dvh; overflow-y: auto; margin: 0; max-width: 100%; }
+    .field-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div id="error-banner"></div>
+<div id="loading"><div class="spinner"></div><p id="loading-msg">Loading&hellip;</p></div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">Ashvaren</div>
+    <div class="auth-tagline">Clarity. Structure. Growth.</div>
+    <h2>Vehicle Tracker</h2>
+    <p>Enter your credentials to get started. These are stored only in your browser's local storage.</p>
+    <div class="config-section">
+      <label>Google OAuth client ID</label>
+      <input type="text" id="cfg-client-id" placeholder="xxxx.apps.googleusercontent.com" />
+      <div class="hint">From Google Cloud Console &rsaquo; APIs &amp; Services &rsaquo; Credentials</div>
+    </div>
+    <div class="config-section">
+      <label>Proxy URL <span style="font-weight:300;letter-spacing:0;">(leave blank for now)</span></label>
+      <input type="text" id="cfg-proxy-url" placeholder="https://ashvaren-vehicles-proxy.xxx.workers.dev" />
+      <div class="hint">Cloudflare Worker &mdash; set up in WP7</div>
+    </div>
+    <button class="btn-primary" onclick="saveConfigAndAuth()">Connect with Google &rarr;</button>
+    <p class="auth-note">You will be redirected to Google to grant access to Drive and Calendar.</p>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app">
+  <header>
+    <div class="header-left">
+      <span class="logo">Ashvaren</span>
+      <span class="logo-tag">Vehicle tracker</span>
+    </div>
+    <div class="header-right">
+      <span class="sync-status" id="sync-status"></span>
+      <button class="sync-btn" onclick="saveToD()">Save to Drive</button>
+      <button class="sync-btn" onclick="openSettings()">Settings</button>
+      <button class="sync-btn" onclick="signOut()">Sign out</button>
+      <button class="hamburger-btn" onclick="toggleMobileMenu()" id="hamburger-btn" aria-label="Menu">&#9776;</button>
+    </div>
+  </header>
+
+  <div class="mobile-menu" id="mobile-menu">
+    <button class="mobile-menu-item" onclick="saveToD();closeMobileMenu()">Save to Drive</button>
+    <button class="mobile-menu-item" onclick="openSettings();closeMobileMenu()">Settings</button>
+    <button class="mobile-menu-item" onclick="signOut()">Sign out</button>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-tab active" onclick="showView('dashboard', this)">Dashboard</button>
+    <button class="nav-tab" onclick="showView('assets', this)">Assets</button>
+    <button class="nav-tab" onclick="showView('compliance', this)">Compliance</button>
+    <button class="nav-tab" onclick="showView('settings-view', this)">Settings</button>
+  </div>
+
+  <main>
+
+    <!-- DASHBOARD VIEW -->
+    <div id="view-dashboard">
+      <div class="dashboard-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Compliance alerts</span>
+          </div>
+          <div class="panel-body" id="dashboard-alerts">
+            <div class="empty-state">No assets loaded yet</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Recent mileage &amp; hours</span>
+          </div>
+          <div class="panel-body" id="dashboard-mileage">
+            <div class="empty-state">No readings recorded yet</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:1.25rem;">
+        <div class="panel-header">
+          <span class="panel-title">Quick actions</span>
+        </div>
+        <div class="panel-body" style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="sync-btn" onclick="showView('assets', document.querySelectorAll('.nav-tab')[1])">+ Add asset</button>
+          <button class="sync-btn" id="quick-add-mileage" disabled>+ Add mileage reading</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ASSETS VIEW -->
+    <div id="view-assets" style="display:none;">
+      <div class="filter-pills" id="asset-filter-pills">
+        <button class="filter-pill active" onclick="setAssetFilter('all', this)">All</button>
+        <button class="filter-pill" onclick="setAssetFilter('car', this)">Cars</button>
+        <button class="filter-pill" onclick="setAssetFilter('motorcycle', this)">Motorcycles</button>
+        <button class="filter-pill" onclick="setAssetFilter('garden', this)">Garden</button>
+      </div>
+      <div class="cards-grid" id="asset-cards-grid">
+        <div class="add-card" onclick="openAssetModal()">+ Add asset</div>
+      </div>
+    </div>
+
+    <!-- ASSET DETAIL VIEW (not a tab — rendered full page) -->
+    <div id="view-asset-detail" style="display:none;">
+      <div style="margin-bottom:1rem;">
+        <button class="sync-btn" onclick="closeAssetDetail()">&larr; Back to assets</button>
+      </div>
+      <div id="asset-detail-content"></div>
+    </div>
+
+    <!-- COMPLIANCE VIEW -->
+    <div id="view-compliance" style="display:none;">
+      <div class="compliance-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Type</th>
+              <th>Expiry</th>
+              <th>Days remaining</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="compliance-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-dim);font-family:var(--mono);font-size:11px;">No compliance records yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="view-settings-view" style="display:none;">
+      <div class="panel" style="max-width:520px;">
+        <div class="panel-header"><span class="panel-title">Configuration</span></div>
+        <div style="padding:1.25rem;">
+          <div class="field">
+            <label>Google OAuth client ID</label>
+            <input type="text" id="sv-client-id" />
+          </div>
+          <div class="field">
+            <label>Proxy URL <span class="opt">(Cloudflare Worker &mdash; WP7)</span></label>
+            <input type="text" id="sv-proxy-url" placeholder="https://ashvaren-vehicles-proxy.xxx.workers.dev" />
+          </div>
+          <div class="field">
+            <label>Default reminder lead days</label>
+            <input type="number" id="sv-reminder-days" value="30" min="1" max="90" />
+          </div>
+          <div style="margin-top:1rem;">
+            <button class="btn-save" onclick="saveSettingsView()">Save settings</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ASSET ADD / EDIT MODAL -->
+<div class="modal-overlay" id="asset-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2 id="asset-modal-title">Add asset</h2>
+      <button onclick="closeAssetModal()" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <p class="modal-subtitle">Enter the details for this asset.</p>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Asset type</label>
+        <select id="am-type">
+          <option value="car">Car</option>
+          <option value="motorcycle">Motorcycle</option>
+          <option value="mower">Mower</option>
+          <option value="strimmer">Strimmer</option>
+          <option value="blower">Blower</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="am-status">
+          <option value="road">Road</option>
+          <option value="sorn">SORN</option>
+          <option value="project">Project</option>
+          <option value="in-use">In use</option>
+          <option value="stored">Stored</option>
+          <option value="retired">Retired</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Display name</label>
+      <input type="text" id="am-name" placeholder="e.g. BMW E36 318ti Compact" />
+    </div>
+
+    <div class="field">
+      <label>Group <span class="opt">optional — e.g. NC30 Collection</span></label>
+      <input type="text" id="am-group" placeholder="e.g. NC30 Collection" />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Make</label>
+        <input type="text" id="am-make" placeholder="e.g. BMW" />
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <input type="text" id="am-model" placeholder="e.g. 318ti Compact (E36)" />
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Year</label>
+        <input type="number" id="am-year" placeholder="1997" min="1900" max="2030" />
+      </div>
+      <div class="field">
+        <label>Colour <span class="opt">optional</span></label>
+        <input type="text" id="am-colour" placeholder="e.g. Boston Green" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>VRM / frame number / serial number</label>
+      <input type="text" id="am-identifier" placeholder="Registration, frame, or serial number" />
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>VIN <span class="opt">optional</span></label>
+        <input type="text" id="am-vin" />
+      </div>
+      <div class="field">
+        <label>Engine number <span class="opt">optional</span></label>
+        <input type="text" id="am-engine" />
+      </div>
+    </div>
+
+    <div class="section-divider">Acquisition &amp; value</div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Acquisition date</label>
+        <input type="date" id="am-acq-date" />
+      </div>
+      <div class="field">
+        <label>Acquisition cost &pound;</label>
+        <input type="number" id="am-acq-cost" placeholder="0" min="0" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Current value &pound; <span class="opt">user-maintained estimate</span></label>
+      <input type="number" id="am-value" placeholder="0" min="0" />
+    </div>
+
+    <div class="field" id="am-uses-hours-field" style="display:none;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="am-uses-hours" style="width:auto;margin:0;" />
+        <span>Track hours rather than mileage (garden machinery)</span>
+      </label>
+    </div>
+
+    <div class="field">
+      <label>Notes <span class="opt">optional</span></label>
+      <textarea id="am-notes" placeholder="Background, condition, history&hellip;"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAssetModal()">Cancel</button>
+      <button class="btn-save" onclick="saveAsset()">Save asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL (header button) -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <h2>Settings</h2>
+    <div class="field">
+      <label>Google OAuth client ID</label>
+      <input type="text" id="s-client-id" />
+    </div>
+    <div class="field">
+      <label>Proxy URL <span class="opt">(Cloudflare Worker &mdash; WP7)</span></label>
+      <input type="text" id="s-proxy-url" />
+    </div>
+    <div class="field">
+      <label>Default reminder lead days</label>
+      <input type="number" id="s-reminder-days" value="30" min="1" max="90" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  const banner = document.getElementById('error-banner');
+  if (banner) {
+    banner.style.display = 'block';
+    banner.textContent = 'JS Error: ' + msg + '\nFile: ' + src + ' Line: ' + line + ':' + col + (err ? '\n' + err.stack : '');
+  }
+  document.getElementById('loading-msg').textContent = 'Error on load — see red banner';
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  const banner = document.getElementById('error-banner');
+  if (banner) {
+    banner.style.display = 'block';
+    banner.textContent = (banner.textContent || '') + '\nUnhandled promise: ' + (e.reason ? e.reason.toString() : 'unknown');
+  }
+});
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const SCOPES    = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar';
+const STATE_FILE = 'vehicle-tracker-state.json';
+
+// ── App state ────────────────────────────────────────────────────────────────
+let cfg = { clientId: '', proxyUrl: '', reminderDays: 30 };
+let token = null;
+let driveFileId = null;
+let editAssetId = null;
+let assetFilter = 'all';
+
+let state = {
+  assets: [],
+  complianceRecords: [],
+  mileageReadings: [],
+  settings: { reminderLeadDays: 30, calendarId: null },
+};
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+window.onload = async () => {
+  cfg.clientId    = localStorage.getItem('vt_client_id')   || '';
+  cfg.proxyUrl    = localStorage.getItem('vt_proxy_url')   || '';
+  cfg.reminderDays = parseInt(localStorage.getItem('vt_reminder_days') || '30');
+
+  const hash = window.location.hash;
+  if (hash.includes('access_token')) {
+    token = new URLSearchParams(hash.replace('#', '?')).get('access_token');
+    localStorage.setItem('vt_token', token);
+    window.location.hash = '';
+    await boot();
+    return;
+  }
+
+  token = localStorage.getItem('vt_token');
+  if (token && cfg.clientId) {
+    try { await boot(); }
+    catch (e) {
+      document.getElementById('error-banner').style.display = 'block';
+      document.getElementById('error-banner').textContent   = 'Boot error: ' + e.message + '\n' + e.stack;
+      document.getElementById('loading-msg').textContent    = 'Boot failed — see red banner';
+    }
+  } else {
+    document.getElementById('loading').style.display    = 'none';
+    if (cfg.clientId) document.getElementById('cfg-client-id').value = cfg.clientId;
+    if (cfg.proxyUrl) document.getElementById('cfg-proxy-url').value  = cfg.proxyUrl;
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+};
+
+async function boot() {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display     = 'block';
+  await loadFromDrive();
+  render();
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+function saveConfigAndAuth() {
+  const id = document.getElementById('cfg-client-id').value.trim();
+  const px = document.getElementById('cfg-proxy-url').value.trim().replace(/\/$/, '');
+  if (!id) { alert('Google OAuth client ID is required.'); return; }
+  cfg.clientId = id;
+  cfg.proxyUrl = px;
+  localStorage.setItem('vt_client_id', id);
+  localStorage.setItem('vt_proxy_url', px);
+  goGoogle();
+}
+
+function goGoogle() {
+  const r = window.location.origin + window.location.pathname;
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cfg.clientId)}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=${encodeURIComponent(SCOPES)}&prompt=consent`;
+}
+
+function signOut() {
+  localStorage.removeItem('vt_token');
+  token = null;
+  document.getElementById('app').style.display        = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ── Drive helpers ─────────────────────────────────────────────────────────────
+async function gapi(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { localStorage.removeItem('vt_token'); goGoogle(); return null; }
+  return res;
+}
+
+async function mkFolder(parentId, name) {
+  const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const r = await gapi(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+  if (!r) return null;
+  const d = await r.json();
+  if (d.files && d.files.length) return d.files[0].id;
+  const c = await gapi('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  });
+  if (!c) return null;
+  const f = await c.json();
+  return f.id;
+}
+
+async function ensurePath(parts) {
+  let p = 'root';
+  for (const n of parts) { p = await mkFolder(p, n); if (!p) return null; }
+  return p;
+}
+
+async function loadFromDrive() {
+  setSS('Loading\u2026');
+  try {
+    const fid = await ensurePath(['Ashvaren', 'Vehicles']);
+    if (!fid) { setSS('Drive error'); return; }
+    const q = `name='${STATE_FILE}' and '${fid}' in parents and trashed=false`;
+    const r = await gapi(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+    if (!r) return;
+    const d = await r.json();
+    if (d.files && d.files.length) {
+      driveFileId = d.files[0].id;
+      const fr = await gapi(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+      if (fr) {
+        const j = await fr.json();
+        if (j.assets) state = j;
+      }
+    } else {
+      // First run — write empty state
+      await saveToD();
+    }
+    setSS('');
+  } catch (e) { setSS('Drive error'); console.error(e); }
+}
+
+async function saveToD() {
+  setSS('Saving\u2026');
+  try {
+    const fid  = await ensurePath(['Ashvaren', 'Vehicles']);
+    if (!fid) { setSS('Save failed'); return; }
+    const body = JSON.stringify(state, null, 2);
+    if (driveFileId) {
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body,
+      });
+    } else {
+      const m = await gapi('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        body: JSON.stringify({ name: STATE_FILE, mimeType: 'application/json', parents: [fid] }),
+      });
+      if (m) {
+        const f = await m.json();
+        driveFileId = f.id;
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body,
+        });
+      }
+    }
+    setSS('Saved \u2713');
+    setTimeout(() => setSS(''), 3000);
+  } catch (e) { setSS('Save failed'); console.error(e); }
+}
+
+function setSS(m) { document.getElementById('sync-status').textContent = m; }
+
+// ── Compliance helpers ────────────────────────────────────────────────────────
+function daysUntilExpiry(expiryDateStr) {
+  if (!expiryDateStr) return null;
+  const today  = new Date(); today.setHours(0, 0, 0, 0);
+  const expiry = new Date(expiryDateStr);
+  return Math.floor((expiry - today) / (1000 * 60 * 60 * 24));
+}
+
+function complianceStatus(days, leadDays) {
+  if (days === null) return 'none';
+  if (days < 0)     return 'overdue';
+  if (days <= leadDays) return 'soon';
+  return 'ok';
+}
+
+function complianceLabel(type) {
+  return { mot: 'MOT', 'road-tax': 'Road tax', insurance: 'Insurance', 'v5-location': 'V5 location', 'service-plan': 'Service plan' }[type] || type;
+}
+
+function worstCompliance(assetId) {
+  const lead    = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+  const records = state.complianceRecords.filter(r => r.assetId === assetId);
+  if (!records.length) return 'none';
+  const statuses = records.map(r => complianceStatus(daysUntilExpiry(r.expiryDate), lead));
+  if (statuses.includes('overdue')) return 'overdue';
+  if (statuses.includes('soon'))    return 'soon';
+  return 'ok';
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  renderDashboard();
+  renderAssetGrid();
+  renderComplianceTable();
+  populateSettingsView();
+}
+
+function renderDashboard() {
+  const lead = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+
+  // Compliance alerts
+  const alertsEl = document.getElementById('dashboard-alerts');
+  const alerts = state.complianceRecords
+    .map(r => ({ r, days: daysUntilExpiry(r.expiryDate), asset: state.assets.find(a => a.id === r.assetId) }))
+    .filter(x => x.asset && x.days !== null && x.days <= lead)
+    .sort((a, b) => a.days - b.days);
+
+  if (!alerts.length) {
+    alertsEl.innerHTML = '<div class="empty-state">All compliance records are up to date</div>';
+  } else {
+    alertsEl.innerHTML = alerts.map(({ r, days, asset }) => {
+      const cls  = days < 0 ? 'alert-overdue' : 'alert-soon';
+      const txt  = days < 0
+        ? `Expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} ago`
+        : `Due in ${days} day${days !== 1 ? 's' : ''}`;
+      return `<div class="compliance-alert-item">
+        <div class="compliance-dot ${days < 0 ? 'overdue' : 'soon'}"></div>
+        <div>
+          <div class="alert-asset">${asset.name} &mdash; ${complianceLabel(r.type)}</div>
+          <div class="alert-detail ${cls}">${txt}${r.expiryDate ? ' (' + r.expiryDate + ')' : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Recent mileage
+  const mileageEl = document.getElementById('dashboard-mileage');
+  const recent = [...state.mileageReadings]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 5);
+
+  if (!recent.length) {
+    mileageEl.innerHTML = '<div class="empty-state">No readings recorded yet</div>';
+  } else {
+    mileageEl.innerHTML = recent.map(m => {
+      const asset = state.assets.find(a => a.id === m.assetId);
+      const label = asset ? asset.name : 'Unknown';
+      const unit  = asset && asset.usesHours ? 'hrs' : 'mi';
+      return `<div class="compliance-alert-item">
+        <div>
+          <div class="alert-asset">${label}</div>
+          <div class="alert-detail">${m.value.toLocaleString('en-GB')} ${unit}${m.isEstimate ? ' (est.)' : ''} &mdash; ${m.date}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+function renderAssetGrid() {
+  const grid    = document.getElementById('asset-cards-grid');
+  const lead    = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+  const filters = { car: ['car'], motorcycle: ['motorcycle'], garden: ['mower', 'strimmer', 'blower'] };
+  const filtered = assetFilter === 'all'
+    ? state.assets
+    : state.assets.filter(a => (filters[assetFilter] || [assetFilter]).includes(a.assetType));
+
+  const statusClass = s => ({ road: 's-road', sorn: 's-sorn', project: 's-project', 'in-use': 's-in-use', stored: 's-stored', retired: 's-retired' }[s] || '');
+  const statusLabel = s => ({ road: 'Road', sorn: 'SORN', project: 'Project', 'in-use': 'In use', stored: 'Stored', retired: 'Retired' }[s] || s);
+
+  const cards = filtered.map(a => {
+    const ws     = worstCompliance(a.id);
+    const latest = [...state.mileageReadings]
+      .filter(m => m.assetId === a.id)
+      .sort((x, y) => new Date(y.date) - new Date(x.date))[0];
+    const unit   = a.usesHours ? 'hrs' : 'mi';
+
+    const photoHtml = a.heroPhotoId
+      ? `<img src="https://drive.google.com/thumbnail?id=${a.heroPhotoId}&sz=w600" alt="${a.name}" loading="lazy" />`
+      : `<div class="asset-card-photo-placeholder">No photo yet</div>`;
+
+    const complianceDotHtml = `<div class="compliance-indicator">
+      <div class="compliance-dot ${ws}"></div>
+      <span class="compliance-text">${ws === 'none' ? 'No compliance records' : ws === 'overdue' ? 'Compliance overdue' : ws === 'soon' ? 'Due soon' : 'All OK'}</span>
+    </div>`;
+
+    const mileageHtml = latest
+      ? `<div class="asset-meta">${latest.value.toLocaleString('en-GB')} ${unit}${latest.isEstimate ? ' (est.)' : ''} &mdash; ${latest.date}</div>`
+      : `<div class="asset-meta" style="color:var(--text-dim);">No readings yet</div>`;
+
+    return `<div class="asset-card" onclick="openAssetDetail('${a.id}')">
+      <div class="asset-card-photo">${photoHtml}</div>
+      <div class="asset-card-body">
+        <div class="asset-card-top">
+          <div>
+            <div class="asset-name">${a.name}</div>
+            ${a.group ? `<div class="asset-group">${a.group}</div>` : ''}
+          </div>
+          <span class="status-pill ${statusClass(a.status)}">${statusLabel(a.status)}</span>
+        </div>
+        ${mileageHtml}
+        ${complianceDotHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.innerHTML = cards + `<div class="add-card" onclick="openAssetModal()">+ Add asset</div>`;
+}
+
+function renderComplianceTable() {
+  const tbody = document.getElementById('compliance-tbody');
+  if (!state.complianceRecords.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-dim);font-family:var(--mono);font-size:11px;">No compliance records yet</td></tr>';
+    return;
+  }
+
+  const lead = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+  const rows = [...state.complianceRecords]
+    .sort((a, b) => (a.expiryDate || '9999') > (b.expiryDate || '9999') ? 1 : -1)
+    .map(r => {
+      const asset = state.assets.find(a => a.id === r.assetId);
+      const days  = daysUntilExpiry(r.expiryDate);
+      const ws    = complianceStatus(days, lead);
+      const dotCls = { ok: 'ok', soon: 'soon', overdue: 'overdue', none: 'none' }[ws];
+      const daysText = days === null ? '--' : days < 0 ? `Overdue ${Math.abs(days)}d` : `${days}d`;
+      const daysStyle = days !== null && days < 0 ? 'color:var(--red)' : days !== null && days <= lead ? 'color:var(--amber)' : '';
+
+      return `<tr>
+        <td style="font-weight:500;color:var(--text-hi);">${asset ? asset.name : '--'}</td>
+        <td>${complianceLabel(r.type)}</td>
+        <td style="font-family:var(--mono);font-size:12px;">${r.expiryDate || '--'}</td>
+        <td style="font-family:var(--mono);font-size:12px;${daysStyle}">${daysText}</td>
+        <td style="color:var(--text-sec);">${r.provider || '--'}</td>
+        <td><span class="compliance-dot ${dotCls}" style="display:inline-block;"></span></td>
+        <td></td>
+      </tr>`;
+    });
+
+  tbody.innerHTML = rows.join('');
+}
+
+function populateSettingsView() {
+  document.getElementById('sv-client-id').value     = cfg.clientId;
+  document.getElementById('sv-proxy-url').value     = cfg.proxyUrl;
+  document.getElementById('sv-reminder-days').value = cfg.reminderDays;
+}
+
+// ── View switching ─────────────────────────────────────────────────────────────
+function showView(name, btn) {
+  ['dashboard', 'assets', 'asset-detail', 'compliance', 'settings-view'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.style.display = 'none';
+  });
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('view-' + name);
+  if (el) el.style.display = 'block';
+  if (btn) btn.classList.add('active');
+}
+
+function setAssetFilter(f, btn) {
+  assetFilter = f;
+  document.querySelectorAll('#asset-filter-pills .filter-pill').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderAssetGrid();
+}
+
+// ── Asset detail view ─────────────────────────────────────────────────────────
+function openAssetDetail(assetId) {
+  const asset   = state.assets.find(a => a.id === assetId);
+  if (!asset) return;
+  const lead    = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+  const records = state.complianceRecords.filter(r => r.assetId === assetId);
+  const readings = [...state.mileageReadings]
+    .filter(m => m.assetId === assetId)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const unit = asset.usesHours ? 'hrs' : 'mi';
+
+  const complianceRows = records.length ? records.map(r => {
+    const days = daysUntilExpiry(r.expiryDate);
+    const ws   = complianceStatus(days, lead);
+    const daysStyle = ws === 'overdue' ? 'color:var(--red)' : ws === 'soon' ? 'color:var(--amber)' : '';
+    const daysText  = days === null ? '--' : days < 0 ? `Expired ${Math.abs(days)}d ago` : `${days}d`;
+    return `<tr>
+      <td style="font-weight:500;color:var(--text-hi);">${complianceLabel(r.type)}</td>
+      <td style="font-family:var(--mono);font-size:12px;">${r.expiryDate || '--'}</td>
+      <td style="font-family:var(--mono);font-size:12px;${daysStyle}">${daysText}</td>
+      <td style="color:var(--text-sec);font-size:12px;">${r.provider || '--'}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="4" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No compliance records</td></tr>';
+
+  const readingRows = readings.slice(0, 5).map(m =>
+    `<tr>
+      <td style="font-family:var(--mono);font-size:12px;">${m.date}</td>
+      <td style="font-family:var(--mono);font-size:12px;">${m.value.toLocaleString('en-GB')} ${unit}${m.isEstimate ? ' <span style="color:var(--text-dim)">(est.)</span>' : ''}</td>
+      <td style="color:var(--text-sec);font-size:12px;">${m.source || 'manual'}</td>
+    </tr>`
+  ).join('') || '<tr><td colspan="3" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No readings yet</td></tr>';
+
+  document.getElementById('asset-detail-content').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+      <div>
+        <h1 style="font-family:var(--display);font-size:28px;font-weight:600;color:var(--text-hi);letter-spacing:0.05em;">${asset.name}</h1>
+        ${asset.group ? `<div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:4px;letter-spacing:0.1em;">${asset.group}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="sync-btn" onclick="openAssetModal('${asset.id}')">Edit asset</button>
+      </div>
+    </div>
+
+    <!-- Hero photo -->
+    <div style="background:var(--navy-2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1.25rem;aspect-ratio:16/6;display:flex;align-items:center;justify-content:center;">
+      ${asset.heroPhotoId
+        ? `<img src="https://drive.google.com/thumbnail?id=${asset.heroPhotoId}&sz=w1200" style="width:100%;height:100%;object-fit:cover;" />`
+        : `<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:center;"><div style="margin-bottom:8px;">No hero photo yet</div><div style="font-size:10px;">Photo upload arrives in WP4</div></div>`
+      }
+    </div>
+
+    <!-- Key facts -->
+    <div class="panel" style="margin-bottom:1.25rem;">
+      <div class="panel-header"><span class="panel-title">Key facts</span></div>
+      <div style="padding:1rem 1.25rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;">
+        ${[
+          ['Make', asset.make],
+          ['Model', asset.model],
+          ['Year', asset.year],
+          ['Colour', asset.colour],
+          ['VRM / identifier', asset.identifier],
+          ['VIN', asset.vin],
+          ['Engine number', asset.engineNumber],
+          ['Status', asset.status],
+          ['Acquisition date', asset.acquisitionDate],
+          ['Acquisition cost', asset.acquisitionCost ? '&pound;' + Number(asset.acquisitionCost).toLocaleString('en-GB') : null],
+          ['Current value', asset.currentValue ? '&pound;' + Number(asset.currentValue).toLocaleString('en-GB') : null],
+        ].filter(([, v]) => v).map(([l, v]) => `
+          <div>
+            <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">${l}</div>
+            <div style="font-size:13px;color:var(--text-hi);">${v}</div>
+          </div>`).join('')}
+      </div>
+      ${asset.notes ? `<div style="padding:0 1.25rem 1rem;font-size:13px;color:var(--text-sec);line-height:1.65;border-top:1px solid var(--border);padding-top:1rem;">${asset.notes}</div>` : ''}
+    </div>
+
+    <!-- Compliance -->
+    <div class="panel" style="margin-bottom:1.25rem;">
+      <div class="panel-header">
+        <span class="panel-title">Compliance</span>
+        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="alert('Compliance CRUD arrives in WP6.')">+ Add record</button>
+      </div>
+      <div style="overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:var(--navy);">
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Type</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Expiry</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Days</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Provider</th>
+          </tr></thead>
+          <tbody>${complianceRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Mileage -->
+    <div class="panel" style="margin-bottom:1.25rem;">
+      <div class="panel-header">
+        <span class="panel-title">Mileage &amp; hours</span>
+        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="alert('Mileage logging arrives in WP5.')">+ Add reading</button>
+      </div>
+      <div style="overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:var(--navy);">
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Date</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Reading</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Source</th>
+          </tr></thead>
+          <tbody>${readingRows}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Phase placeholder panels -->
+    <div class="phase-placeholder">
+      <div class="phase-placeholder-label">Phase 2 &mdash; Document capture &amp; Ask Claude</div>
+      <p>Photograph MOT certificates, invoices, and inspection reports. Ask Claude questions about this asset using its full history as context.</p>
+    </div>
+    <div class="phase-placeholder">
+      <div class="phase-placeholder-label">Phase 3 &mdash; Parts catalogue</div>
+      <p>Log parts on hand, track stock levels, and link parts consumption to maintenance records.</p>
+    </div>
+    <div class="phase-placeholder">
+      <div class="phase-placeholder-label">Phase 4 &mdash; Service schedules</div>
+      <p>Interval-based service reminders by mileage, hours, or calendar date.</p>
+    </div>
+  `;
+
+  // Hide main nav views and show detail
+  ['dashboard', 'assets', 'compliance', 'settings-view'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.style.display = 'none';
+  });
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-asset-detail').style.display = 'block';
+}
+
+function closeAssetDetail() {
+  document.getElementById('view-asset-detail').style.display = 'none';
+  showView('assets', document.querySelectorAll('.nav-tab')[1]);
+  renderAssetGrid();
+}
+
+// ── Asset modal ───────────────────────────────────────────────────────────────
+function openAssetModal(assetId) {
+  editAssetId = assetId || null;
+  const a = assetId ? state.assets.find(x => x.id === assetId) : null;
+
+  document.getElementById('asset-modal-title').textContent = a ? 'Edit asset' : 'Add asset';
+  document.getElementById('am-type').value       = a ? a.assetType        : 'car';
+  document.getElementById('am-status').value     = a ? a.status           : 'road';
+  document.getElementById('am-name').value       = a ? a.name             : '';
+  document.getElementById('am-group').value      = a ? (a.group || '')    : '';
+  document.getElementById('am-make').value       = a ? (a.make || '')     : '';
+  document.getElementById('am-model').value      = a ? (a.model || '')    : '';
+  document.getElementById('am-year').value       = a ? (a.year || '')     : '';
+  document.getElementById('am-colour').value     = a ? (a.colour || '')   : '';
+  document.getElementById('am-identifier').value = a ? (a.identifier || ''): '';
+  document.getElementById('am-vin').value        = a ? (a.vin || '')      : '';
+  document.getElementById('am-engine').value     = a ? (a.engineNumber || ''): '';
+  document.getElementById('am-acq-date').value   = a ? (a.acquisitionDate || ''): '';
+  document.getElementById('am-acq-cost').value   = a ? (a.acquisitionCost || ''): '';
+  document.getElementById('am-value').value      = a ? (a.currentValue || ''): '';
+  document.getElementById('am-notes').value      = a ? (a.notes || '')    : '';
+  document.getElementById('am-uses-hours').checked = a ? !!a.usesHours    : false;
+
+  updateUsesHoursVisibility();
+  document.getElementById('asset-modal').classList.add('open');
+  setTimeout(() => document.getElementById('am-name').focus(), 100);
+}
+
+function updateUsesHoursVisibility() {
+  const type = document.getElementById('am-type').value;
+  const gardenTypes = ['mower', 'strimmer', 'blower'];
+  document.getElementById('am-uses-hours-field').style.display = gardenTypes.includes(type) ? 'block' : 'none';
+  if (gardenTypes.includes(type)) document.getElementById('am-uses-hours').checked = true;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const typeSelect = document.getElementById('am-type');
+  if (typeSelect) typeSelect.addEventListener('change', updateUsesHoursVisibility);
+});
+
+function closeAssetModal() {
+  document.getElementById('asset-modal').classList.remove('open');
+  editAssetId = null;
+}
+
+function saveAsset() {
+  const name = document.getElementById('am-name').value.trim();
+  if (!name) { toast('Please enter a display name.'); return; }
+
+  const assetData = {
+    assetType:       document.getElementById('am-type').value,
+    status:          document.getElementById('am-status').value,
+    name,
+    group:           document.getElementById('am-group').value.trim() || null,
+    make:            document.getElementById('am-make').value.trim(),
+    model:           document.getElementById('am-model').value.trim(),
+    year:            parseInt(document.getElementById('am-year').value) || null,
+    colour:          document.getElementById('am-colour').value.trim() || null,
+    identifier:      document.getElementById('am-identifier').value.trim(),
+    vin:             document.getElementById('am-vin').value.trim() || null,
+    engineNumber:    document.getElementById('am-engine').value.trim() || null,
+    acquisitionDate: document.getElementById('am-acq-date').value || null,
+    acquisitionCost: parseFloat(document.getElementById('am-acq-cost').value) || null,
+    currentValue:    parseFloat(document.getElementById('am-value').value) || null,
+    usesHours:       document.getElementById('am-uses-hours').checked,
+    notes:           document.getElementById('am-notes').value.trim(),
+    heroPhotoId:     null,
+    photoIds:        [],
+    driveFolder:     null,
+    updatedAt:       new Date().toISOString(),
+  };
+
+  if (editAssetId) {
+    const idx = state.assets.findIndex(a => a.id === editAssetId);
+    if (idx > -1) {
+      state.assets[idx] = { ...state.assets[idx], ...assetData };
+    }
+  } else {
+    state.assets.push({
+      id:        'a' + Date.now(),
+      createdAt: new Date().toISOString(),
+      ...assetData,
+    });
+  }
+
+  closeAssetModal();
+  saveToD();
+  render();
+  toast(editAssetId ? 'Asset updated.' : 'Asset added.');
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('s-client-id').value     = cfg.clientId;
+  document.getElementById('s-proxy-url').value     = cfg.proxyUrl;
+  document.getElementById('s-reminder-days').value = cfg.reminderDays;
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function saveSettings() {
+  const id   = document.getElementById('s-client-id').value.trim();
+  const px   = document.getElementById('s-proxy-url').value.trim().replace(/\/$/, '');
+  const days = parseInt(document.getElementById('s-reminder-days').value) || 30;
+  if (!id) { toast('OAuth client ID is required.'); return; }
+  const changed = id !== cfg.clientId;
+  cfg.clientId     = id;
+  cfg.proxyUrl     = px;
+  cfg.reminderDays = days;
+  localStorage.setItem('vt_client_id',      id);
+  localStorage.setItem('vt_proxy_url',      px);
+  localStorage.setItem('vt_reminder_days',  String(days));
+  if (state.settings) state.settings.reminderLeadDays = days;
+  closeSettings();
+  if (changed) { toast('Re-authenticating\u2026'); setTimeout(goGoogle, 1200); }
+  else { toast('Settings saved.'); render(); }
+}
+
+function saveSettingsView() {
+  const id   = document.getElementById('sv-client-id').value.trim();
+  const px   = document.getElementById('sv-proxy-url').value.trim().replace(/\/$/, '');
+  const days = parseInt(document.getElementById('sv-reminder-days').value) || 30;
+  if (!id) { toast('OAuth client ID is required.'); return; }
+  cfg.clientId     = id;
+  cfg.proxyUrl     = px;
+  cfg.reminderDays = days;
+  localStorage.setItem('vt_client_id',     id);
+  localStorage.setItem('vt_proxy_url',     px);
+  localStorage.setItem('vt_reminder_days', String(days));
+  if (state.settings) state.settings.reminderLeadDays = days;
+  toast('Settings saved.');
+  render();
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function toast(m) {
+  const el = document.getElementById('toast');
+  el.textContent = m;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function toggleMobileMenu() {
+  document.getElementById('mobile-menu').classList.toggle('open');
+}
+
+function closeMobileMenu() {
+  document.getElementById('mobile-menu').classList.remove('open');
+}
+
+document.addEventListener('click', function (e) {
+  const menu = document.getElementById('mobile-menu');
+  const btn  = document.getElementById('hamburger-btn');
+  if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.classList.remove('open');
+  }
+});
+
+['asset-modal', 'settings-modal'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
