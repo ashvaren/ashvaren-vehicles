@@ -1106,6 +1106,179 @@ async function ensurePath(parts) {
   return p;
 }
 
+function kmToMiles(km) { return Math.round(km * 0.621371); }
+
+function buildSeedState() {
+  const now = new Date().toISOString();
+  const assets = [
+    // ── Road vehicles ──────────────────────────────────────────────────────
+    {
+      id: 'a001', createdAt: now, updatedAt: now,
+      assetType: 'car', status: 'road',
+      name: 'BMW E36 318ti Compact',
+      group: null,
+      make: 'BMW', model: '318ti Compact (E36)', year: 1997, colour: 'Boston Green',
+      identifier: 'R457 UKE', vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, notes: '',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a002', createdAt: now, updatedAt: now,
+      assetType: 'car', status: 'road',
+      name: 'Reliant Scimitar GTE 1972',
+      group: null,
+      make: 'Reliant', model: 'Scimitar GTE (SE5)', year: 1972, colour: 'Highland Purple',
+      identifier: 'DKT 110K', vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false,
+      notes: 'Interior work required. Front suspension rebuild needed. New exhaust and engine inspection outstanding.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a003', createdAt: now, updatedAt: now,
+      assetType: 'car', status: 'road',
+      name: 'Volvo XC90 T8 Hybrid',
+      group: null,
+      make: 'Volvo', model: 'XC90 T8 Recharge', year: 2020, colour: null,
+      identifier: 'LM20 BNA', vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, notes: 'Family car. Serviced by Volvo dealer.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a004', createdAt: now, updatedAt: now,
+      assetType: 'motorcycle', status: 'road',
+      name: 'Honda VFR400 NC30 — Road',
+      group: 'NC30 Collection',
+      make: 'Honda', model: 'VFR400 NC30', year: null, colour: null,
+      identifier: 'H248 FGH', vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, odometerUnit: 'km',
+      notes: 'Road-registered NC30. Odometer reads in km.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    // ── NC30 project bikes ─────────────────────────────────────────────────
+    {
+      id: 'a005', createdAt: now, updatedAt: now,
+      assetType: 'motorcycle', status: 'project',
+      name: 'Honda VFR400 NC30 — Bike 2',
+      group: 'NC30 Collection',
+      make: 'Honda', model: 'VFR400 NC30', year: null, colour: null,
+      identifier: 'G768 SVV', vin: 'NC301052203', engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, odometerUnit: 'km',
+      notes: '',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a006', createdAt: now, updatedAt: now,
+      assetType: 'motorcycle', status: 'project',
+      name: 'Honda VFR400 NC30 — Bike 3',
+      group: 'NC30 Collection',
+      make: 'Honda', model: 'VFR400 NC30', year: null, colour: null,
+      identifier: 'H754 JLB', vin: 'NC301057211', engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, odometerUnit: 'km',
+      notes: '',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a007', createdAt: now, updatedAt: now,
+      assetType: 'motorcycle', status: 'project',
+      name: 'Honda VFR400 NC30 — Bike 4',
+      group: 'NC30 Collection',
+      make: 'Honda', model: 'VFR400 NC30', year: null, colour: null,
+      identifier: 'L434 UVG', vin: 'NC301109893', engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: false, odometerUnit: 'km',
+      notes: '',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    // ── Garden machinery ───────────────────────────────────────────────────
+    {
+      id: 'a008', createdAt: now, updatedAt: now,
+      assetType: 'mower', status: 'in-use',
+      name: 'Honda HRB 476c',
+      group: 'Garden Machinery',
+      make: 'Honda', model: 'HRB 476c', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: 'Self-propelled rear-roller mower.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a009', createdAt: now, updatedAt: now,
+      assetType: 'mower', status: 'in-use',
+      name: 'Hayter Harrier 48 GS',
+      group: 'Garden Machinery',
+      make: 'Hayter', model: 'Harrier 48 GS', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: 'Self-propelled cylinder mower.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a010', createdAt: now, updatedAt: now,
+      assetType: 'mower', status: 'in-use',
+      name: 'Allett Kensington KENS20B',
+      group: 'Garden Machinery',
+      make: 'Allett', model: 'Kensington KENS20B', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: 'Cylinder cassette mower.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a011', createdAt: now, updatedAt: now,
+      assetType: 'strimmer', status: 'in-use',
+      name: 'Stihl FS55 Strimmer',
+      group: 'Garden Machinery',
+      make: 'Stihl', model: 'FS55', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: '',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a012', createdAt: now, updatedAt: now,
+      assetType: 'strimmer', status: 'in-use',
+      name: 'Titan TTL530GBC Brush Cutter',
+      group: 'Garden Machinery',
+      make: 'Titan', model: 'TTL530GBC', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: 'Petrol brush cutter.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+    {
+      id: 'a013', createdAt: now, updatedAt: now,
+      assetType: 'blower', status: 'in-use',
+      name: 'Stihl SH86C Blower',
+      group: 'Garden Machinery',
+      make: 'Stihl', model: 'SH86C', year: null, colour: null,
+      identifier: null, vin: null, engineNumber: null,
+      acquisitionDate: null, acquisitionCost: null, currentValue: null,
+      usesHours: true, notes: 'Vacuum shredder blower.',
+      heroPhotoId: null, photoIds: [], driveFolder: null,
+    },
+  ];
+
+  const mileageReadings = [
+    { id: 'm001', assetId: 'a001', date: '2025-04-14', value: 75412, source: 'manual', isEstimate: false, notes: '' },
+    { id: 'm002', assetId: 'a002', date: '2025-04-14', value: 84635, source: 'manual', isEstimate: false, notes: '' },
+    { id: 'm003', assetId: 'a003', date: '2025-04-14', value: 40088, source: 'manual', isEstimate: false, notes: '' },
+    { id: 'm004', assetId: 'a004', date: '2025-04-14', value: 2748,  source: 'manual', isEstimate: false, notes: 'Odometer in km' },
+  ];
+
+  return {
+    assets,
+    complianceRecords: [],
+    mileageReadings,
+    settings: { reminderLeadDays: 30, calendarId: null },
+  };
+}
+
 async function loadFromDrive() {
   setSS('Loading\u2026');
   try {
@@ -1120,11 +1293,20 @@ async function loadFromDrive() {
       const fr = await gapi(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
       if (fr) {
         const j = await fr.json();
-        if (j.assets) state = j;
+        // Load from Drive if it has assets; otherwise seed
+        if (j.assets && j.assets.length > 0) {
+          state = j;
+        } else {
+          state = buildSeedState();
+          await saveToD();
+          toast('Seed data loaded — 13 assets created.');
+        }
       }
     } else {
-      // First run — write empty state
+      // No file at all — first run
+      state = buildSeedState();
       await saveToD();
+      toast('Seed data loaded — 13 assets created.');
     }
     setSS('');
   } catch (e) { setSS('Drive error'); console.error(e); }
@@ -1239,13 +1421,15 @@ function renderDashboard() {
     mileageEl.innerHTML = '<div class="empty-state">No readings recorded yet</div>';
   } else {
     mileageEl.innerHTML = recent.map(m => {
-      const asset = state.assets.find(a => a.id === m.assetId);
-      const label = asset ? asset.name : 'Unknown';
-      const unit  = asset && asset.usesHours ? 'hrs' : 'mi';
+      const asset  = state.assets.find(a => a.id === m.assetId);
+      const label  = asset ? asset.name : 'Unknown';
+      const isKm   = asset && !asset.usesHours && asset.odometerUnit === 'km';
+      const unit   = asset && asset.usesHours ? 'hrs' : (isKm ? 'km' : 'mi');
+      const conv   = isKm ? ` (${kmToMiles(m.value).toLocaleString('en-GB')} mi)` : '';
       return `<div class="compliance-alert-item">
         <div>
           <div class="alert-asset">${label}</div>
-          <div class="alert-detail">${m.value.toLocaleString('en-GB')} ${unit}${m.isEstimate ? ' (est.)' : ''} &mdash; ${m.date}</div>
+          <div class="alert-detail">${m.value.toLocaleString('en-GB')} ${unit}${conv}${m.isEstimate ? ' (est.)' : ''} &mdash; ${m.date}</div>
         </div>
       </div>`;
     }).join('');
@@ -1268,7 +1452,8 @@ function renderAssetGrid() {
     const latest = [...state.mileageReadings]
       .filter(m => m.assetId === a.id)
       .sort((x, y) => new Date(y.date) - new Date(x.date))[0];
-    const unit   = a.usesHours ? 'hrs' : 'mi';
+    const isKm  = !a.usesHours && a.odometerUnit === 'km';
+    const unit  = a.usesHours ? 'hrs' : (isKm ? 'km' : 'mi');
 
     const photoHtml = a.heroPhotoId
       ? `<img src="https://drive.google.com/thumbnail?id=${a.heroPhotoId}&sz=w600" alt="${a.name}" loading="lazy" />`
@@ -1280,7 +1465,7 @@ function renderAssetGrid() {
     </div>`;
 
     const mileageHtml = latest
-      ? `<div class="asset-meta">${latest.value.toLocaleString('en-GB')} ${unit}${latest.isEstimate ? ' (est.)' : ''} &mdash; ${latest.date}</div>`
+      ? `<div class="asset-meta">${latest.value.toLocaleString('en-GB')} ${unit}${isKm ? ' (' + kmToMiles(latest.value).toLocaleString('en-GB') + ' mi)' : ''}${latest.isEstimate ? ' (est.)' : ''} &mdash; ${latest.date}</div>`
       : `<div class="asset-meta" style="color:var(--text-dim);">No readings yet</div>`;
 
     return `<div class="asset-card" onclick="openAssetDetail('${a.id}')">
@@ -1368,7 +1553,8 @@ function openAssetDetail(assetId) {
   const readings = [...state.mileageReadings]
     .filter(m => m.assetId === assetId)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
-  const unit = asset.usesHours ? 'hrs' : 'mi';
+  const isKm = !asset.usesHours && asset.odometerUnit === 'km';
+  const unit = asset.usesHours ? 'hrs' : (isKm ? 'km' : 'mi');
 
   const complianceRows = records.length ? records.map(r => {
     const days = daysUntilExpiry(r.expiryDate);
@@ -1386,7 +1572,7 @@ function openAssetDetail(assetId) {
   const readingRows = readings.slice(0, 5).map(m =>
     `<tr>
       <td style="font-family:var(--mono);font-size:12px;">${m.date}</td>
-      <td style="font-family:var(--mono);font-size:12px;">${m.value.toLocaleString('en-GB')} ${unit}${m.isEstimate ? ' <span style="color:var(--text-dim)">(est.)</span>' : ''}</td>
+      <td style="font-family:var(--mono);font-size:12px;">${m.value.toLocaleString('en-GB')} ${unit}${isKm ? ' <span style="color:var(--text-dim)">(' + kmToMiles(m.value).toLocaleString('en-GB') + ' mi)</span>' : ''}${m.isEstimate ? ' <span style="color:var(--text-dim)">(est.)</span>' : ''}</td>
       <td style="color:var(--text-sec);font-size:12px;">${m.source || 'manual'}</td>
     </tr>`
   ).join('') || '<tr><td colspan="3" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No readings yet</td></tr>';
