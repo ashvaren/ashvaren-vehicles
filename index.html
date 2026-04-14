@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="Ashvaren Vehicle Tracker — personal asset management for vehicles and garden machinery." />
+<meta name="theme-color" content="#080c14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Vehicles" />
 <title>Ashvaren — Vehicle Tracker</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23080c14'/><text x='16' y='22' text-anchor='middle' font-size='18' font-family='Georgia,serif' fill='%23b89a5a'>A</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -206,6 +212,8 @@
     background: var(--navy);
     border-bottom: 1px solid var(--border);
     padding: 0 2rem;
+    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
     height: 58px;
     display: flex;
     align-items: center;
@@ -661,7 +669,7 @@
     .nav-bar { padding: 0 0.5rem; overflow-x: auto; scrollbar-width: none; }
     .nav-bar::-webkit-scrollbar { display: none; }
     .nav-tab { padding: 12px 14px; font-size: 10px; white-space: nowrap; }
-    main { padding: 1rem; }
+    main { padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
     .dashboard-grid { grid-template-columns: 1fr; }
     .cards-grid { grid-template-columns: 1fr; }
     .modal-overlay { padding: 0; align-items: flex-end; }
@@ -730,10 +738,14 @@
 
     <!-- DASHBOARD VIEW -->
     <div id="view-dashboard">
+      <!-- Summary strip -->
+      <div id="dashboard-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:1.25rem;"></div>
+      <!-- Main panels -->
       <div class="dashboard-grid">
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Compliance alerts</span>
+            <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="openComplianceModal(null,null)">+ Add record</button>
           </div>
           <div class="panel-body" id="dashboard-alerts">
             <div class="empty-state">No assets loaded yet</div>
@@ -742,19 +754,22 @@
         <div class="panel">
           <div class="panel-header">
             <span class="panel-title">Recent mileage &amp; hours</span>
+            <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="openMileageModal(null)">+ Add reading</button>
           </div>
           <div class="panel-body" id="dashboard-mileage">
             <div class="empty-state">No readings recorded yet</div>
           </div>
         </div>
       </div>
+      <!-- Quick actions -->
       <div class="panel" style="margin-bottom:1.25rem;">
-        <div class="panel-header">
-          <span class="panel-title">Quick actions</span>
-        </div>
+        <div class="panel-header"><span class="panel-title">Quick actions</span></div>
         <div class="panel-body" style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="sync-btn" onclick="showView('assets', document.querySelectorAll('.nav-tab')[1])">+ Add asset</button>
-          <button class="sync-btn" id="quick-add-mileage" onclick="openMileageModal(null)">+ Add mileage reading</button>
+          <button class="sync-btn" onclick="showView('assets', document.querySelectorAll('.nav-tab')[1])">Assets</button>
+          <button class="sync-btn" onclick="showView('compliance', document.querySelectorAll('.nav-tab')[2])">All compliance</button>
+          <button class="sync-btn" onclick="openAssetModal()">+ Add asset</button>
+          <button class="sync-btn" onclick="openMileageModal(null)">+ Add mileage reading</button>
+          <button class="sync-btn" onclick="openComplianceModal(null,null)">+ Add compliance record</button>
         </div>
       </div>
     </div>
@@ -1545,6 +1560,28 @@ function render() {
 function renderDashboard() {
   const lead = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
 
+  // Summary strip
+  const summaryEl = document.getElementById('dashboard-summary');
+  if (summaryEl) {
+    const totalAssets   = state.assets.length;
+    const roadAssets    = state.assets.filter(a => a.status === 'road' || a.status === 'in-use').length;
+    const totalOverdue  = state.complianceRecords.filter(r => { const d = daysUntilExpiry(r.expiryDate); return d !== null && d < 0; }).length;
+    const totalDueSoon  = state.complianceRecords.filter(r => { const d = daysUntilExpiry(r.expiryDate); return d !== null && d >= 0 && d <= lead; }).length;
+    const totalReadings = state.mileageReadings.length;
+    const metrics = [
+      { label: 'Total assets',     value: totalAssets,   colour: 'var(--text-hi)' },
+      { label: 'On the road',      value: roadAssets,    colour: 'var(--green)' },
+      { label: 'Compliance due',   value: totalDueSoon,  colour: totalDueSoon  > 0 ? 'var(--amber)' : 'var(--green)' },
+      { label: 'Overdue',          value: totalOverdue,  colour: totalOverdue  > 0 ? 'var(--red)'   : 'var(--green)' },
+      { label: 'Mileage readings', value: totalReadings, colour: 'var(--text-hi)' },
+    ];
+    summaryEl.innerHTML = metrics.map(m => `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow);">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;">${m.label}</div>
+        <div style="font-family:var(--display);font-size:26px;font-weight:500;color:${m.colour};line-height:1;">${m.value}</div>
+      </div>`).join('');
+  }
+
   // Compliance alerts
   const alertsEl = document.getElementById('dashboard-alerts');
   const alerts = state.complianceRecords
@@ -1553,19 +1590,26 @@ function renderDashboard() {
     .sort((a, b) => a.days - b.days);
 
   if (!alerts.length) {
-    alertsEl.innerHTML = '<div class="empty-state">All compliance records are up to date</div>';
+    alertsEl.innerHTML = `<div style="padding:20px 16px;display:flex;align-items:center;gap:10px;">
+      <div class="compliance-dot ok"></div>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--text-hi);">All compliance records are up to date</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:2px;">${state.complianceRecords.length} record${state.complianceRecords.length !== 1 ? 's' : ''} tracked across ${state.assets.length} assets</div>
+      </div>
+    </div>`;
   } else {
     alertsEl.innerHTML = alerts.map(({ r, days, asset }) => {
       const cls  = days < 0 ? 'alert-overdue' : 'alert-soon';
       const txt  = days < 0
         ? `Expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''} ago`
         : `Due in ${days} day${days !== 1 ? 's' : ''}`;
-      return `<div class="compliance-alert-item">
+      return `<div class="compliance-alert-item" style="cursor:pointer;" onclick="openAssetDetail('${asset.id}')">
         <div class="compliance-dot ${days < 0 ? 'overdue' : 'soon'}"></div>
-        <div>
+        <div style="flex:1;">
           <div class="alert-asset">${asset.name} &mdash; ${complianceLabel(r.type)}</div>
-          <div class="alert-detail ${cls}">${txt}${r.expiryDate ? ' (' + r.expiryDate + ')' : ''}</div>
+          <div class="alert-detail ${cls}">${txt}${r.expiryDate ? ' (' + r.expiryDate + ')' : ''}${r.provider ? ' &mdash; ' + r.provider : ''}</div>
         </div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);padding-left:8px;">&rsaquo;</div>
       </div>`;
     }).join('');
   }
@@ -1585,11 +1629,13 @@ function renderDashboard() {
       const isKm   = asset && !asset.usesHours && asset.odometerUnit === 'km';
       const unit   = asset && asset.usesHours ? 'hrs' : (isKm ? 'km' : 'mi');
       const conv   = isKm ? ` (${kmToMiles(m.value).toLocaleString('en-GB')} mi)` : '';
-      return `<div class="compliance-alert-item">
-        <div>
+      const assetId2 = asset ? asset.id : null;
+      return `<div class="compliance-alert-item" style="${assetId2 ? 'cursor:pointer;' : ''}" ${assetId2 ? `onclick="openAssetDetail('${assetId2}')"` : ''}>
+        <div style="flex:1;">
           <div class="alert-asset">${label}</div>
           <div class="alert-detail">${m.value.toLocaleString('en-GB')} ${unit}${conv}${m.isEstimate ? ' (est.)' : ''} &mdash; ${m.date}</div>
         </div>
+        ${assetId2 ? '<div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);padding-left:8px;">&rsaquo;</div>' : ''}
       </div>`;
     }).join('');
   }
