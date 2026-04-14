@@ -1044,7 +1044,22 @@ async function boot() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display     = 'block';
   await loadFromDrive();
+  await fixExistingPhotoPermissions();
   render();
+}
+
+// Fix any photos uploaded before the permissions step was added
+async function fixExistingPhotoPermissions() {
+  const allPhotoIds = state.assets.flatMap(a => a.photoIds || []);
+  for (const fileId of allPhotoIds) {
+    try {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+      });
+    } catch (e) { /* best effort */ }
+  }
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -1796,6 +1811,14 @@ async function uploadFileToDrive(file, folderId, fileName) {
     body: arrayBuffer,
   });
   if (!upload.ok) throw new Error('Drive upload failed: ' + upload.status);
+
+  // Step 3: make the file readable by anyone with the link so the thumbnail URL works
+  await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+  });
+
   return fileId;
 }
 
