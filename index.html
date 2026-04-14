@@ -1446,6 +1446,15 @@ async function loadFromDrive() {
         // Load from Drive if it has assets; otherwise seed
         if (j.assets && j.assets.length > 0) {
           state = j;
+          // Migration: inject seed compliance records if none exist yet
+          if (!state.complianceRecords || state.complianceRecords.length === 0) {
+            const seed = buildSeedState();
+            state.complianceRecords = seed.complianceRecords;
+            await saveToD();
+            toast('Compliance records loaded.');
+          }
+          // Ensure settings object exists
+          if (!state.settings) state.settings = { reminderLeadDays: 30, calendarId: null };
         } else {
           state = buildSeedState();
           await saveToD();
