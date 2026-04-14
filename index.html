@@ -971,6 +971,72 @@
   </div>
 </div>
 
+<!-- COMPLIANCE RECORD MODAL -->
+<div class="modal-overlay" id="compliance-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2 id="compliance-modal-title">Add compliance record</h2>
+      <button onclick="closeComplianceModal()" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <p class="modal-subtitle">MOT, road tax, insurance, V5 location or service plan.</p>
+    <div class="field-row">
+      <div class="field">
+        <label>Asset</label>
+        <select id="cm-asset"></select>
+      </div>
+      <div class="field">
+        <label>Record type</label>
+        <select id="cm-type">
+          <option value="mot">MOT</option>
+          <option value="road-tax">Road tax</option>
+          <option value="insurance">Insurance</option>
+          <option value="v5-location">V5 location</option>
+          <option value="service-plan">Service plan</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Expiry date</label>
+        <input type="date" id="cm-expiry" />
+      </div>
+      <div class="field">
+        <label>Start date <span class="opt">optional</span></label>
+        <input type="date" id="cm-start" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Provider <span class="opt">optional</span></label>
+        <input type="text" id="cm-provider" placeholder="e.g. AA, DVLA, Bennetts" />
+      </div>
+      <div class="field">
+        <label>Policy / ref number <span class="opt">optional</span></label>
+        <input type="text" id="cm-policy" placeholder="e.g. GDCCA07743809" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Cost &pound; <span class="opt">optional</span></label>
+        <input type="number" id="cm-cost" placeholder="0" min="0" step="0.01" />
+      </div>
+      <div class="field">
+        <label>Reminder lead days</label>
+        <input type="number" id="cm-lead" value="30" min="1" max="90" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes <span class="opt">optional</span></label>
+      <input type="text" id="cm-notes" placeholder="e.g. Comprehensive, MOT exempt" />
+    </div>
+    <div id="cm-calendar-status" style="display:none;margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text-dim);padding:8px 12px;background:var(--navy);border-radius:7px;border:1px solid var(--border);"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeComplianceModal()">Cancel</button>
+      <button class="btn-save" id="cm-save-btn" onclick="saveComplianceRecord()">Save record</button>
+    </div>
+  </div>
+</div>
+
 <!-- MILEAGE READING MODAL -->
 <div class="modal-overlay" id="mileage-modal">
   <div class="modal">
@@ -1093,6 +1159,8 @@ async function boot() {
   document.getElementById('app').style.display     = 'block';
   await loadFromDrive();
   await fixExistingPhotoPermissions();
+  await ensureVehiclesCalendar();
+  await syncSeedComplianceToCalendar();
   render();
 }
 
@@ -1334,9 +1402,28 @@ function buildSeedState() {
     { id: 'm004', assetId: 'a004', date: '2025-04-14', value: 2748,  source: 'manual', isEstimate: false, notes: 'Odometer in km' },
   ];
 
+  const complianceRecords = [
+    // BMW E36 318ti -- a001
+    { id: 'c001', assetId: 'a001', type: 'mot',        provider: 'DVSA',          policyNumber: null,             startDate: null,         expiryDate: '2026-09-07', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c002', assetId: 'a001', type: 'road-tax',   provider: 'DVLA',          policyNumber: null,             startDate: null,         expiryDate: '2026-09-01', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c003', assetId: 'a001', type: 'insurance',  provider: 'AA / Ageas',    policyNumber: 'GDCCA07743809', startDate: '2025-09-04', expiryDate: '2026-09-04', reminderLeadDays: 30, cost: null, notes: 'Comprehensive',                               calendarEventId: null },
+    // Reliant Scimitar GTE -- a002
+    { id: 'c004', assetId: 'a002', type: 'mot',        provider: 'DVSA',          policyNumber: null,             startDate: null,         expiryDate: '2027-04-01', reminderLeadDays: 30, cost: null, notes: 'MOT exempt — voluntary annual check',        calendarEventId: null },
+    { id: 'c005', assetId: 'a002', type: 'road-tax',   provider: 'DVLA',          policyNumber: null,             startDate: null,         expiryDate: '2027-04-01', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c006', assetId: 'a002', type: 'insurance',  provider: 'Adrian Flux',   policyNumber: 'GP98643B',       startDate: null,         expiryDate: '2027-03-12', reminderLeadDays: 30, cost: null, notes: 'Comprehensive',                               calendarEventId: null },
+    // Volvo XC90 -- a003
+    { id: 'c007', assetId: 'a003', type: 'mot',        provider: 'DVSA',          policyNumber: null,             startDate: null,         expiryDate: '2026-05-11', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c008', assetId: 'a003', type: 'road-tax',   provider: 'DVLA',          policyNumber: null,             startDate: null,         expiryDate: '2026-07-01', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c009', assetId: 'a003', type: 'insurance',  provider: 'Allianz',       policyNumber: 'FLO462327715456', startDate: '2025-12-01', expiryDate: '2026-11-30', reminderLeadDays: 30, cost: 591.70, notes: 'Comprehensive — Allianz Online Gold',     calendarEventId: null },
+    // Honda VFR400 NC30 Road -- a004
+    { id: 'c010', assetId: 'a004', type: 'mot',        provider: 'DVSA',          policyNumber: null,             startDate: null,         expiryDate: '2026-09-19', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c011', assetId: 'a004', type: 'road-tax',   provider: 'DVLA',          policyNumber: null,             startDate: null,         expiryDate: '2026-10-01', reminderLeadDays: 30, cost: null, notes: '',                                           calendarEventId: null },
+    { id: 'c012', assetId: 'a004', type: 'insurance',  provider: 'Bennetts',      policyNumber: 'GP98643B',       startDate: null,         expiryDate: '2026-08-23', reminderLeadDays: 30, cost: null, notes: 'Comprehensive',                               calendarEventId: null },
+  ];
+
   return {
     assets,
-    complianceRecords: [],
+    complianceRecords,
     mileageReadings,
     settings: { reminderLeadDays: 30, calendarId: null },
   };
@@ -1628,9 +1715,13 @@ function openAssetDetail(assetId) {
       <td style="font-weight:500;color:var(--text-hi);">${complianceLabel(r.type)}</td>
       <td style="font-family:var(--mono);font-size:12px;">${r.expiryDate || '--'}</td>
       <td style="font-family:var(--mono);font-size:12px;${daysStyle}">${daysText}</td>
-      <td style="color:var(--text-sec);font-size:12px;">${r.provider || '--'}</td>
+      <td style="color:var(--text-sec);font-size:12px;">${r.provider || '--'}${r.policyNumber ? ' · ' + r.policyNumber : ''}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button onclick="openComplianceModal('${r.id}','${assetId}')" style="font-family:var(--mono);font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--text-dim);cursor:pointer;margin-right:4px;">Edit</button>
+        <button onclick="deleteComplianceRecord('${r.id}','${assetId}')" style="font-family:var(--mono);font-size:10px;padding:2px 8px;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--text-dim);cursor:pointer;" onmouseover="this.style.background='var(--red-bg)';this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.background='transparent';this.style.color='var(--text-dim)';this.style.borderColor='transparent'">Remove</button>
+      </td>
     </tr>`;
-  }).join('') : '<tr><td colspan="4" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No compliance records</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:1rem 0;">No compliance records</td></tr>';
 
   const readingRows = readings.slice(0, 12).map(m =>
     `<tr>
@@ -1713,7 +1804,7 @@ function openAssetDetail(assetId) {
     <div class="panel" style="margin-bottom:1.25rem;">
       <div class="panel-header">
         <span class="panel-title">Compliance</span>
-        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="alert('Compliance CRUD arrives in WP6.')">+ Add record</button>
+        <button class="sync-btn" style="font-size:9px;padding:3px 10px;" onclick="openComplianceModal(null,'${asset.id}')">+ Add record</button>
       </div>
       <div style="overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -1721,7 +1812,8 @@ function openAssetDetail(assetId) {
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Type</th>
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Expiry</th>
             <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Days</th>
-            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Provider</th>
+            <th style="padding:10px 14px;text-align:left;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);border-bottom:1px solid var(--border);">Provider / policy</th>
+            <th style="padding:10px 14px;border-bottom:1px solid var(--border);"></th>
           </tr></thead>
           <tbody>${complianceRows}</tbody>
         </table>
@@ -1971,6 +2063,214 @@ function saveAsset() {
   toast(editAssetId ? 'Asset updated.' : 'Asset added.');
 }
 
+// ── Calendar helpers ─────────────────────────────────────────────────────────
+async function ensureVehiclesCalendar() {
+  if (state.settings && state.settings.calendarId) return;
+  try {
+    // Check if calendar already exists
+    const r = await gapi('https://www.googleapis.com/calendar/v3/users/me/calendarList');
+    if (!r) return;
+    const d = await r.json();
+    const existing = (d.items || []).find(c => c.summary === 'Ashvaren Vehicles');
+    if (existing) {
+      state.settings.calendarId = existing.id;
+      await saveToD();
+      return;
+    }
+    // Create it
+    const cr = await gapi('https://www.googleapis.com/calendar/v3/calendars', {
+      method: 'POST',
+      body: JSON.stringify({ summary: 'Ashvaren Vehicles', timeZone: 'Europe/London' }),
+    });
+    if (!cr) return;
+    const cal = await cr.json();
+    state.settings.calendarId = cal.id;
+    await saveToD();
+    toast('Ashvaren Vehicles calendar created.');
+  } catch (e) { console.error('Calendar create failed:', e); }
+}
+
+// Calendar colour IDs: MOT=11(red), road-tax=9(blueberry), insurance=5(banana/gold), default=7(peacock)
+const CAL_COLOURS = { mot: '11', 'road-tax': '9', insurance: '5', 'v5-location': '7', 'service-plan': '7' };
+
+async function upsertCalendarEvent(record) {
+  const calId = state.settings && state.settings.calendarId;
+  if (!calId || !record.expiryDate) return null;
+
+  const asset  = state.assets.find(a => a.id === record.assetId);
+  const title  = `${complianceLabel(record.type)} — ${asset ? asset.name : 'Vehicle'}`;
+  const desc   = [
+    asset ? asset.identifier : '',
+    record.provider || '',
+    record.policyNumber || '',
+    record.notes || '',
+    'Managed at https://ashvaren.github.io/ashvaren-vehicles/',
+  ].filter(Boolean).join(' · ');
+
+  const event = {
+    summary:     title,
+    description: desc,
+    start:       { date: record.expiryDate },
+    end:         { date: record.expiryDate },
+    colorId:     CAL_COLOURS[record.type] || '7',
+    reminders: {
+      useDefault: false,
+      overrides:  [{ method: 'email', minutes: (record.reminderLeadDays || 30) * 24 * 60 }],
+    },
+  };
+
+  try {
+    if (record.calendarEventId) {
+      // Update existing event
+      const r = await gapi(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${record.calendarEventId}`,
+        { method: 'PUT', body: JSON.stringify(event) }
+      );
+      if (r && r.ok) { const d = await r.json(); return d.id; }
+    }
+    // Create new event
+    const r = await gapi(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
+      { method: 'POST', body: JSON.stringify(event) }
+    );
+    if (r && r.ok) { const d = await r.json(); return d.id; }
+  } catch (e) { console.error('Calendar event upsert failed:', e); }
+  return null;
+}
+
+async function deleteCalendarEvent(eventId) {
+  const calId = state.settings && state.settings.calendarId;
+  if (!calId || !eventId) return;
+  try {
+    await gapi(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}`,
+      { method: 'DELETE' }
+    );
+  } catch (e) { console.error('Calendar event delete failed:', e); }
+}
+
+// ── Compliance modal ──────────────────────────────────────────────────────────
+let editComplianceId = null;
+let complianceAssetId = null;
+
+function openComplianceModal(recordId, assetId) {
+  editComplianceId  = recordId || null;
+  complianceAssetId = assetId  || null;
+
+  const r = recordId ? state.complianceRecords.find(x => x.id === recordId) : null;
+
+  document.getElementById('compliance-modal-title').textContent = r ? 'Edit compliance record' : 'Add compliance record';
+  document.getElementById('cm-calendar-status').style.display = 'none';
+
+  // Populate asset selector
+  const sel = document.getElementById('cm-asset');
+  sel.innerHTML = state.assets.map(a =>
+    `<option value="${a.id}" ${a.id === (r ? r.assetId : assetId) ? 'selected' : ''}>${a.name}</option>`
+  ).join('');
+
+  document.getElementById('cm-type').value    = r ? r.type           : 'mot';
+  document.getElementById('cm-expiry').value  = r ? (r.expiryDate  || '') : '';
+  document.getElementById('cm-start').value   = r ? (r.startDate   || '') : '';
+  document.getElementById('cm-provider').value= r ? (r.provider    || '') : '';
+  document.getElementById('cm-policy').value  = r ? (r.policyNumber|| '') : '';
+  document.getElementById('cm-cost').value    = r ? (r.cost        || '') : '';
+  document.getElementById('cm-lead').value    = r ? (r.reminderLeadDays || 30) : 30;
+  document.getElementById('cm-notes').value   = r ? (r.notes       || '') : '';
+
+  document.getElementById('compliance-modal').classList.add('open');
+}
+
+function closeComplianceModal() {
+  document.getElementById('compliance-modal').classList.remove('open');
+  editComplianceId = null;
+  complianceAssetId = null;
+}
+
+async function saveComplianceRecord() {
+  const assetId = document.getElementById('cm-asset').value;
+  const expiry  = document.getElementById('cm-expiry').value;
+  if (!assetId) { toast('Please select an asset.'); return; }
+  if (!expiry)  { toast('Please enter an expiry date.'); return; }
+
+  const btn = document.getElementById('cm-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const calStatus = document.getElementById('cm-calendar-status');
+  calStatus.style.display = 'block';
+  calStatus.textContent   = 'Syncing to Google Calendar…';
+
+  const record = {
+    id:               editComplianceId || ('c' + Date.now()),
+    assetId,
+    type:             document.getElementById('cm-type').value,
+    expiryDate:       expiry,
+    startDate:        document.getElementById('cm-start').value   || null,
+    provider:         document.getElementById('cm-provider').value.trim() || null,
+    policyNumber:     document.getElementById('cm-policy').value.trim()   || null,
+    cost:             parseFloat(document.getElementById('cm-cost').value) || null,
+    reminderLeadDays: parseInt(document.getElementById('cm-lead').value)   || 30,
+    notes:            document.getElementById('cm-notes').value.trim(),
+    calendarEventId:  editComplianceId
+      ? (state.complianceRecords.find(x => x.id === editComplianceId) || {}).calendarEventId || null
+      : null,
+  };
+
+  // Sync to calendar
+  const eventId = await upsertCalendarEvent(record);
+  if (eventId) {
+    record.calendarEventId = eventId;
+    calStatus.textContent  = 'Calendar event saved ✓';
+  } else {
+    calStatus.textContent  = 'Calendar sync unavailable — record saved locally';
+  }
+
+  if (editComplianceId) {
+    const idx = state.complianceRecords.findIndex(x => x.id === editComplianceId);
+    if (idx > -1) state.complianceRecords[idx] = record;
+  } else {
+    state.complianceRecords.push(record);
+  }
+
+  await saveToD();
+  render();
+
+  const detailVisible = document.getElementById('view-asset-detail').style.display !== 'none';
+  if (detailVisible) openAssetDetail(assetId);
+
+  setTimeout(() => {
+    closeComplianceModal();
+    toast(editComplianceId ? 'Compliance record updated.' : 'Compliance record added.');
+  }, 800);
+
+  btn.disabled = false; btn.textContent = 'Save record';
+}
+
+async function deleteComplianceRecord(recordId, assetId) {
+  if (!confirm('Remove this compliance record? The calendar event will also be deleted.')) return;
+  const record = state.complianceRecords.find(r => r.id === recordId);
+  if (record && record.calendarEventId) {
+    await deleteCalendarEvent(record.calendarEventId);
+  }
+  state.complianceRecords = state.complianceRecords.filter(r => r.id !== recordId);
+  await saveToD();
+  render();
+  openAssetDetail(assetId);
+  toast('Compliance record removed.');
+}
+
+// ── Sync all seeded compliance records to calendar (run once) ────────────────
+async function syncSeedComplianceToCalendar() {
+  const unsynced = state.complianceRecords.filter(r => !r.calendarEventId && r.expiryDate);
+  if (!unsynced.length) return;
+  setSS('Syncing calendar…');
+  for (const record of unsynced) {
+    const eventId = await upsertCalendarEvent(record);
+    if (eventId) record.calendarEventId = eventId;
+  }
+  await saveToD();
+  setSS('');
+}
+
 // ── Mileage modal ────────────────────────────────────────────────────────────
 let mileageModalAssetId = null;
 
@@ -2205,7 +2505,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-['asset-modal', 'settings-modal', 'mileage-modal'].forEach(id => {
+['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
 });
