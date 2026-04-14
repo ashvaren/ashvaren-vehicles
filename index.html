@@ -1588,12 +1588,36 @@ function openAssetDetail(assetId) {
       </div>
     </div>
 
-    <!-- Hero photo -->
-    <div style="background:var(--navy-2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1.25rem;aspect-ratio:16/6;display:flex;align-items:center;justify-content:center;">
-      ${asset.heroPhotoId
-        ? `<img src="https://drive.google.com/thumbnail?id=${asset.heroPhotoId}&sz=w1200" style="width:100%;height:100%;object-fit:cover;" />`
-        : `<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:center;"><div style="margin-bottom:8px;">No hero photo yet</div><div style="font-size:10px;">Photo upload arrives in WP4</div></div>`
-      }
+    <!-- Hero photo & gallery -->
+    <div style="margin-bottom:1.25rem;">
+      <div style="position:relative;background:var(--navy-2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;aspect-ratio:16/6;display:flex;align-items:center;justify-content:center;">
+        ${asset.heroPhotoId
+          ? `<img src="https://drive.google.com/thumbnail?id=${asset.heroPhotoId}&sz=w1200" style="width:100%;height:100%;object-fit:cover;" alt="${asset.name}" />`
+          : `<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);text-align:center;"><div style="margin-bottom:8px;">No hero photo yet</div><div style="font-size:10px;opacity:0.6;">Upload a photo below</div></div>`
+        }
+      </div>
+      ${asset.photoIds && asset.photoIds.length > 0 ? `
+      <div style="display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none;">
+        ${asset.photoIds.map(pid => `
+          <div style="position:relative;flex-shrink:0;width:100px;height:70px;border-radius:6px;overflow:hidden;border:2px solid ${pid === asset.heroPhotoId ? 'var(--accent)' : 'var(--border)'};cursor:pointer;" onclick="setHeroPhoto('${asset.id}','${pid}')">
+            <img src="https://drive.google.com/thumbnail?id=${pid}&sz=w200" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />
+            ${pid === asset.heroPhotoId
+              ? '<div style="position:absolute;bottom:0;left:0;right:0;background:var(--accent);font-family:var(--mono);font-size:8px;letter-spacing:0.06em;text-align:center;padding:2px;color:#fff;">HERO</div>'
+              : '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-family:var(--mono);font-size:8px;letter-spacing:0.06em;text-align:center;padding:2px;color:var(--text-dim);opacity:0;transition:opacity 0.15s;" class="set-hero-label">SET HERO</div>'
+            }
+          </div>`).join('')}
+      </div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;padding-top:4px;flex-wrap:wrap;">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent-hi)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+          📷 Take photo
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(event,'${asset.id}')" />
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent-hi)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">
+          🖼 Choose file
+          <input type="file" accept="image/*" style="display:none;" onchange="handlePhotoUpload(event,'${asset.id}')" />
+        </label>
+        <span id="photo-uploading" style="display:none;font-family:var(--mono);font-size:10px;color:var(--text-dim);">Uploading&hellip;</span>
+      </div>
     </div>
 
     <!-- Key facts -->
@@ -1688,6 +1712,93 @@ function closeAssetDetail() {
   renderAssetGrid();
 }
 
+// ── Photo upload ──────────────────────────────────────────────────────────────
+async function handlePhotoUpload(event, assetId) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const asset = state.assets.find(a => a.id === assetId);
+  if (!asset) return;
+
+  // Show uploading indicator
+  const ind = document.getElementById('photo-uploading');
+  if (ind) ind.style.display = 'inline';
+
+  try {
+    // Ensure asset Drive folder exists
+    if (!asset.driveFolder) {
+      const safeName = asset.name.replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+      asset.driveFolder = await ensurePath(['Ashvaren', 'Vehicles', 'Assets', safeName, 'photos']);
+    } else {
+      // Ensure photos subfolder exists within existing folder
+      // driveFolder may point to asset root or photos — we store photos folderId separately
+    }
+
+    // Create photos folder if not yet stored as photosFolderId
+    if (!asset.photosFolderId) {
+      const safeName = asset.name.replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+      asset.photosFolderId = await ensurePath(['Ashvaren', 'Vehicles', 'Assets', safeName, 'photos']);
+    }
+
+    const fileId = await uploadFileToDrive(file, asset.photosFolderId, file.name);
+
+    if (!asset.photoIds) asset.photoIds = [];
+    asset.photoIds.push(fileId);
+
+    // First photo becomes hero automatically
+    if (!asset.heroPhotoId) {
+      asset.heroPhotoId = fileId;
+    }
+
+    asset.updatedAt = new Date().toISOString();
+    await saveToD();
+    toast('Photo uploaded.');
+
+    // Re-render the detail view for this asset
+    openAssetDetail(assetId);
+
+  } catch (e) {
+    toast('Upload failed: ' + e.message);
+    console.error(e);
+  } finally {
+    const ind2 = document.getElementById('photo-uploading');
+    if (ind2) ind2.style.display = 'none';
+    // Reset file input so the same file can be re-selected if needed
+    event.target.value = '';
+  }
+}
+
+async function setHeroPhoto(assetId, photoId) {
+  const asset = state.assets.find(a => a.id === assetId);
+  if (!asset) return;
+  asset.heroPhotoId = photoId;
+  asset.updatedAt   = new Date().toISOString();
+  await saveToD();
+  toast('Hero photo updated.');
+  openAssetDetail(assetId);
+}
+
+async function uploadFileToDrive(file, folderId, fileName) {
+  // Step 1: create metadata
+  const meta = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: fileName, parents: [folderId] }),
+  });
+  if (!meta.ok) throw new Error('Drive metadata create failed: ' + meta.status);
+  const { id: fileId } = await meta.json();
+
+  // Step 2: upload content
+  const arrayBuffer = await file.arrayBuffer();
+  const upload = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': file.type || 'image/jpeg' },
+    body: arrayBuffer,
+  });
+  if (!upload.ok) throw new Error('Drive upload failed: ' + upload.status);
+  return fileId;
+}
+
 // ── Asset modal ───────────────────────────────────────────────────────────────
 function openAssetModal(assetId) {
   editAssetId = assetId || null;
@@ -1754,21 +1865,23 @@ function saveAsset() {
     currentValue:    parseFloat(document.getElementById('am-value').value) || null,
     usesHours:       document.getElementById('am-uses-hours').checked,
     notes:           document.getElementById('am-notes').value.trim(),
-    heroPhotoId:     null,
-    photoIds:        [],
-    driveFolder:     null,
     updatedAt:       new Date().toISOString(),
   };
 
   if (editAssetId) {
     const idx = state.assets.findIndex(a => a.id === editAssetId);
     if (idx > -1) {
+      // Preserve photo and folder data — never overwrite from the edit modal
       state.assets[idx] = { ...state.assets[idx], ...assetData };
     }
   } else {
     state.assets.push({
-      id:        'a' + Date.now(),
-      createdAt: new Date().toISOString(),
+      id:             'a' + Date.now(),
+      createdAt:      new Date().toISOString(),
+      heroPhotoId:    null,
+      photoIds:       [],
+      photosFolderId: null,
+      driveFolder:    null,
       ...assetData,
     });
   }
