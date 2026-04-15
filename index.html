@@ -831,6 +831,10 @@
             <input type="text" id="sv-proxy-url" placeholder="https://ashvaren-vehicles-proxy.xxx.workers.dev" />
           </div>
           <div class="field">
+            <label>Worker secret <span class="opt">from your credentials file</span></label>
+            <input type="password" id="sv-worker-secret" placeholder="Paste your WORKER_SECRET value" />
+          </div>
+          <div class="field">
             <label>Default reminder lead days</label>
             <input type="number" id="sv-reminder-days" value="30" min="1" max="90" />
           </div>
@@ -972,8 +976,12 @@
       <input type="text" id="s-client-id" />
     </div>
     <div class="field">
-      <label>Proxy URL <span class="opt">(Cloudflare Worker &mdash; WP7)</span></label>
+      <label>Proxy URL</label>
       <input type="text" id="s-proxy-url" />
+    </div>
+    <div class="field">
+      <label>Worker secret</label>
+      <input type="password" id="s-worker-secret" />
     </div>
     <div class="field">
       <label>Default reminder lead days</label>
@@ -982,6 +990,22 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
       <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT CAPTURE CONFIRMATION MODAL -->
+<div class="modal-overlay" id="capture-modal">
+  <div class="modal" style="max-width:600px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2>Confirm extraction</h2>
+      <button onclick="closeCaptureModal()" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <p class="modal-subtitle">Review the extracted data before saving. Edit any field that is incorrect.</p>
+    <div id="capture-modal-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCaptureModal()">Cancel</button>
+      <button class="btn-save" id="capture-save-btn" onclick="saveCapture()">Save all</button>
     </div>
   </div>
 </div>
@@ -1125,7 +1149,7 @@ const SCOPES    = 'https://www.googleapis.com/auth/drive.file https://www.google
 const STATE_FILE = 'vehicle-tracker-state.json';
 
 // ── App state ────────────────────────────────────────────────────────────────
-let cfg = { clientId: '', proxyUrl: '', reminderDays: 30 };
+let cfg = { clientId: '', proxyUrl: '', reminderDays: 30, workerSecret: '' };
 let token = null;
 let driveFileId = null;
 let editAssetId = null;
@@ -1140,9 +1164,10 @@ let state = {
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 window.onload = async () => {
-  cfg.clientId    = localStorage.getItem('vt_client_id')   || '';
-  cfg.proxyUrl    = localStorage.getItem('vt_proxy_url')   || '';
+  cfg.clientId     = localStorage.getItem('vt_client_id')      || '';
+  cfg.proxyUrl     = localStorage.getItem('vt_proxy_url')     || '';
   cfg.reminderDays = parseInt(localStorage.getItem('vt_reminder_days') || '30');
+  cfg.workerSecret = localStorage.getItem('vt_worker_secret') || '';
 
   const hash = window.location.hash;
   if (hash.includes('access_token')) {
@@ -1727,6 +1752,7 @@ function renderComplianceTable() {
 function populateSettingsView() {
   document.getElementById('sv-client-id').value     = cfg.clientId;
   document.getElementById('sv-proxy-url').value     = cfg.proxyUrl;
+  document.getElementById('sv-worker-secret').value = cfg.workerSecret;
   document.getElementById('sv-reminder-days').value = cfg.reminderDays;
 }
 
@@ -1896,9 +1922,56 @@ function openAssetDetail(assetId) {
     </div>
 
     <!-- Phase placeholder panels -->
-    <div class="phase-placeholder">
-      <div class="phase-placeholder-label">Phase 2 &mdash; Document capture &amp; Ask Claude</div>
-      <p>Photograph MOT certificates, invoices, and inspection reports. Ask Claude questions about this asset using its full history as context.</p>
+    <!-- Document capture -->
+    <div class="panel" style="margin-bottom:1.25rem;" id="capture-panel-${asset.id}">
+      <div class="panel-header">
+        <span class="panel-title">Documents</span>
+        <div style="display:flex;gap:6px;">
+          <label class="sync-btn" style="cursor:pointer;font-size:9px;padding:3px 10px;">
+            📷 Capture
+            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="startCapture(event,'${asset.id}')" />
+          </label>
+          <label class="sync-btn" style="cursor:pointer;font-size:9px;padding:3px 10px;">
+            🖼 Upload
+            <input type="file" accept="image/*" style="display:none;" onchange="startCapture(event,'${asset.id}')" />
+          </label>
+        </div>
+      </div>
+      <div id="capture-status-${asset.id}" style="display:none;padding:12px 16px;font-family:var(--mono);font-size:11px;color:var(--text-dim);"></div>
+      <div id="doc-list-${asset.id}">
+        ${(maintenanceState.documents || []).filter(d => d.assetId === '${asset.id}').length === 0
+          ? '<div class="empty-state">No documents captured yet</div>'
+          : (maintenanceState.documents || []).filter(d => d.assetId === '${asset.id}').map(d => `
+            <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+              <div style="flex:1;">
+                <div style="font-size:13px;color:var(--text-hi);">${{ mot:'MOT Certificate', 'parts-invoice':'Parts Invoice', 'service-invoice':'Service Invoice', inspection:'Inspection Report', manual:'Manual', photo:'Photo' }[d.type] || d.type}</div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:2px;">${d.createdAt ? d.createdAt.split('T')[0] : ''}</div>
+              </div>
+            </div>`).join('')
+        }
+      </div>
+    </div>
+
+    <!-- Ask Claude -->
+    <div class="panel" style="margin-bottom:1.25rem;">
+      <div class="panel-header" style="cursor:pointer;" onclick="toggleAskClaude('${asset.id}')">
+        <span class="panel-title">Ask Claude about this asset</span>
+        <span id="ask-toggle-${asset.id}" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Expand</span>
+      </div>
+      <div id="ask-panel-${asset.id}" style="display:none;">
+        <div id="ask-history-${asset.id}" style="max-height:300px;overflow-y:auto;padding:8px 0;"></div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end;">
+          <textarea id="ask-input-${asset.id}" placeholder="Ask about this asset…" rows="2" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;resize:none;line-height:1.5;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAsk('${asset.id}');}"></textarea>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--text-dim);" title="Attach photo">
+              📷
+              <input type="file" accept="image/*" style="display:none;" onchange="attachAskPhoto(event,'${asset.id}')" />
+            </label>
+            <button onclick="sendAsk('${asset.id}')" style="width:34px;height:34px;border:none;border-radius:7px;background:var(--accent);color:#fff;cursor:pointer;font-size:14px;">↗</button>
+          </div>
+        </div>
+        <div id="ask-photo-preview-${asset.id}" style="display:none;padding:0 16px 10px;"></div>
+      </div>
     </div>
     <div class="phase-placeholder">
       <div class="phase-placeholder-label">Phase 3 &mdash; Parts catalogue</div>
@@ -1909,6 +1982,26 @@ function openAssetDetail(assetId) {
       <p>Interval-based service reminders by mileage, hours, or calendar date.</p>
     </div>
   `;
+
+  // Load maintenance state (needed for documents list and ask-Claude)
+  ensureMaintenanceLoaded().then(() => {
+    const docListEl = document.getElementById(`doc-list-${assetId}`);
+    if (docListEl) {
+      const docs = (maintenanceState.documents || []).filter(d => d.assetId === assetId);
+      if (docs.length === 0) {
+        docListEl.innerHTML = '<div class="empty-state">No documents captured yet</div>';
+      } else {
+        const typeLabels = { mot:'MOT Certificate','parts-invoice':'Parts Invoice','service-invoice':'Service Invoice',inspection:'Inspection Report',manual:'Manual',photo:'Photo' };
+        docListEl.innerHTML = docs.reverse().map(d => `
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+            <div style="flex:1;">
+              <div style="font-size:13px;color:var(--text-hi);">${typeLabels[d.type] || d.type}</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:2px;">${d.createdAt ? d.createdAt.split('T')[0] : ''}</div>
+            </div>
+          </div>`).join('');
+      }
+    }
+  });
 
   // Hide main nav views and show detail
   ['dashboard', 'assets', 'compliance', 'settings-view'].forEach(v => {
@@ -2116,6 +2209,579 @@ function saveAsset() {
   saveToD();
   render();
   toast(editAssetId ? 'Asset updated.' : 'Asset added.');
+}
+
+// ── Maintenance state ────────────────────────────────────────────────────────
+// vehicle-tracker-maintenance.json — loaded lazily when needed
+let maintenanceState = { documents: [], maintenanceRecords: [], conversations: {} };
+let maintenanceDriveFileId = null;
+const MAINTENANCE_FILE = 'vehicle-tracker-maintenance.json';
+
+async function ensureMaintenanceLoaded() {
+  if (maintenanceDriveFileId) return; // already loaded
+  try {
+    const fid = await ensurePath(['Ashvaren', 'Vehicles']);
+    if (!fid) return;
+    const q = `name='${MAINTENANCE_FILE}' and '${fid}' in parents and trashed=false`;
+    const r = await gapi(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`);
+    if (!r) return;
+    const d = await r.json();
+    if (d.files && d.files.length) {
+      maintenanceDriveFileId = d.files[0].id;
+      const fr = await gapi(`https://www.googleapis.com/drive/v3/files/${maintenanceDriveFileId}?alt=media`);
+      if (fr) {
+        const j = await fr.json();
+        maintenanceState = { documents: [], maintenanceRecords: [], conversations: {}, ...j };
+      }
+    } else {
+      await saveMaintenanceState();
+    }
+  } catch (e) { console.error('Maintenance state load failed:', e); }
+}
+
+async function saveMaintenanceState() {
+  try {
+    const fid = await ensurePath(['Ashvaren', 'Vehicles']);
+    if (!fid) return;
+    const body = JSON.stringify(maintenanceState, null, 2);
+    if (maintenanceDriveFileId) {
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${maintenanceDriveFileId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body,
+      });
+    } else {
+      const m = await gapi('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        body: JSON.stringify({ name: MAINTENANCE_FILE, mimeType: 'application/json', parents: [fid] }),
+      });
+      if (m) {
+        const f = await m.json();
+        maintenanceDriveFileId = f.id;
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${maintenanceDriveFileId}?uploadType=media`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body,
+        });
+      }
+    }
+  } catch (e) { console.error('Maintenance state save failed:', e); }
+}
+
+// ── Image resize helper ───────────────────────────────────────────────────────
+function resizeImage(file, maxPx = 1600) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width  * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({
+          data:      reader.result.split(',')[1],
+          mediaType: 'image/jpeg',
+          blob,
+        });
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.88);
+    };
+    img.src = url;
+  });
+}
+
+// ── Document capture ──────────────────────────────────────────────────────────
+let captureAssetId   = null;
+let capturePages     = [];  // array of { data, mediaType, blob }
+let captureExtracted = null;
+
+async function startCapture(event, assetId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  if (!cfg.proxyUrl) { toast('Proxy URL not set. Go to Settings.'); return; }
+
+  captureAssetId = assetId;
+  capturePages   = [];
+  captureExtracted = null;
+
+  const statusEl = document.getElementById(`capture-status-${assetId}`);
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Resizing image…'; }
+
+  try {
+    const resized = await resizeImage(file);
+    capturePages.push(resized);
+
+    if (statusEl) statusEl.textContent = 'Sending to Claude for extraction…';
+
+    const asset     = state.assets.find(a => a.id === assetId);
+    const assetList = state.assets.map(a => ({ id: a.id, name: a.name, identifier: a.identifier }));
+
+    const r = await fetch(`${cfg.proxyUrl}/extract`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'x-worker-secret': cfg.workerSecret || '',
+      },
+      body: JSON.stringify({
+        assetId,
+        assetName: asset ? asset.name : '',
+        images:    capturePages.map(p => ({ data: p.data, mediaType: p.mediaType })),
+        assetList,
+      }),
+    });
+
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || `HTTP ${r.status}`);
+    }
+
+    const result = await r.json();
+    captureExtracted = result.extraction;
+
+    if (statusEl) statusEl.style.display = 'none';
+
+    showCaptureConfirmation(assetId, captureExtracted);
+
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = `Extraction failed: ${e.message}`; }
+    toast(`Extraction failed: ${e.message}`);
+  }
+}
+
+function showCaptureConfirmation(assetId, extraction) {
+  const { documentType, confidence, fields } = extraction || {};
+  const docTypeLabel = {
+    mot_certificate:   'MOT Certificate',
+    parts_invoice:     'Parts Invoice',
+    service_invoice:   'Service Invoice',
+    inspection_report: 'Inspection Report',
+    unknown:           'Unknown document',
+  }[documentType] || documentType;
+
+  const confPct  = Math.round((confidence || 0) * 100);
+  const confCol  = confPct >= 80 ? 'var(--green)' : confPct >= 50 ? 'var(--amber)' : 'var(--red)';
+
+  const fieldRows = buildFieldRows(documentType, fields || {});
+
+  document.getElementById('capture-modal-content').innerHTML = `
+    <div style="background:var(--navy);border-radius:8px;padding:12px 14px;margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">Document type</div>
+          <select id="cm-doc-type" style="font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);border:1px solid var(--border);border-radius:6px;padding:4px 8px;">
+            <option value="mot_certificate"   ${documentType==='mot_certificate'   ?'selected':''}>MOT Certificate</option>
+            <option value="parts_invoice"     ${documentType==='parts_invoice'     ?'selected':''}>Parts Invoice</option>
+            <option value="service_invoice"   ${documentType==='service_invoice'   ?'selected':''}>Service Invoice</option>
+            <option value="inspection_report" ${documentType==='inspection_report' ?'selected':''}>Inspection Report</option>
+            <option value="unknown"           ${documentType==='unknown'           ?'selected':''}>Unknown</option>
+          </select>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">Confidence</div>
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${confCol};">${confPct}%</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">${fieldRows}</div>
+    <div style="background:var(--navy);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:10px;color:var(--text-dim);">
+      <div style="margin-bottom:4px;color:var(--text-sec);">Records that will be created or updated:</div>
+      <div id="cm-records-preview">${buildRecordsPreview(documentType, fields || {}, assetId)}</div>
+    </div>`;
+
+  document.getElementById('capture-modal').classList.add('open');
+}
+
+function buildFieldRows(docType, fields) {
+  const rows = [];
+  const addRow = (label, key, type='text') => {
+    const val = fields[key] ?? '';
+    const amber = val === null || val === '' || val === undefined;
+    rows.push(`
+      <div style="margin-bottom:8px;">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:${amber?'var(--amber)':'var(--text-dim)'};margin-bottom:3px;">${label}${amber?' ⚠':''}</div>
+        <input type="${type}" id="cf-${key}" value="${val !== null && val !== undefined ? String(val).replace(/"/g,'&quot;') : ''}"
+          style="width:100%;padding:7px 10px;border:1px solid ${amber?'var(--amber)':'var(--border)'};border-radius:7px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;" />
+      </div>`);
+  };
+
+  if (docType === 'mot_certificate') {
+    addRow('VRM', 'vrm');
+    addRow('Test date', 'testDate');
+    addRow('Expiry date', 'expiryDate');
+    addRow('Odometer reading', 'odometerReading', 'number');
+    addRow('Test result', 'testResult');
+    const advisories = (fields.advisories || []).join('; ');
+    rows.push(`
+      <div style="margin-bottom:8px;">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">Advisories (semicolon-separated)</div>
+        <textarea id="cf-advisories" rows="2" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;resize:vertical;">${advisories}</textarea>
+      </div>`);
+  } else if (docType === 'parts_invoice' || docType === 'service_invoice') {
+    addRow('Supplier', 'supplier');
+    addRow('Invoice date', 'invoiceDate');
+    addRow('Invoice number', 'invoiceNumber');
+    addRow('Total (£)', 'total', 'number');
+    if (docType === 'service_invoice') {
+      addRow('Mileage at service', 'mileageAtService', 'number');
+      addRow('Work carried out', 'workCarriedOut');
+    }
+  } else if (docType === 'inspection_report') {
+    addRow('Supplier', 'supplier');
+    addRow('Inspection date', 'inspectionDate');
+    addRow('Mileage', 'mileage', 'number');
+    addRow('Result', 'result');
+    addRow('Findings', 'findings');
+  }
+
+  return rows.join('');
+}
+
+function buildRecordsPreview(docType, fields, assetId) {
+  const asset = state.assets.find(a => a.id === assetId);
+  const lines = [];
+  if (docType === 'mot_certificate') {
+    if (fields.expiryDate) lines.push(`Update MOT compliance record → expiry ${fields.expiryDate}`);
+    if (fields.odometerReading) lines.push(`Create mileage reading → ${fields.odometerReading}`);
+    if ((fields.advisories || []).length > 0) lines.push(`Create maintenance record → ${fields.advisories.length} advisory item(s)`);
+  } else if (docType === 'parts_invoice' || docType === 'service_invoice') {
+    lines.push(`Create maintenance record for ${asset ? asset.name : 'asset'}`);
+    if (fields.mileageAtService) lines.push(`Create mileage reading → ${fields.mileageAtService}`);
+  } else if (docType === 'inspection_report') {
+    lines.push(`Create maintenance record for ${asset ? asset.name : 'asset'}`);
+  }
+  lines.push('Upload image to Drive documents/ folder');
+  lines.push('Save JSON sidecar alongside image');
+  return lines.map(l => `<div style="padding:2px 0;">&bull; ${l}</div>`).join('');
+}
+
+function closeCaptureModal() {
+  document.getElementById('capture-modal').classList.remove('open');
+  captureExtracted = null;
+}
+
+async function saveCapture() {
+  const btn = document.getElementById('capture-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const docType = document.getElementById('cm-doc-type').value;
+  const assetId = captureAssetId;
+  const asset   = state.assets.find(a => a.id === assetId);
+  if (!asset) { btn.disabled = false; btn.textContent = 'Save all'; return; }
+
+  const getField = (key) => {
+    const el = document.getElementById(`cf-${key}`);
+    return el ? el.value.trim() : null;
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  try {
+    await ensureMaintenanceLoaded();
+
+    // 1. Upload image to Drive documents/ folder
+    const safeName = asset.name.replace(/[^a-zA-Z0-9 _-]/g, '').trim();
+    const docsFolderId = await ensurePath(['Ashvaren', 'Vehicles', 'Assets', safeName, 'documents']);
+
+    const docTypeLabel = {
+      mot_certificate: 'MOT Certificate', parts_invoice: 'Parts Invoice',
+      service_invoice: 'Service Invoice', inspection_report: 'Inspection Report',
+    }[docType] || 'Document';
+
+    const supplier = getField('supplier') || getField('vrm') || '';
+    const dateStr  = getField('testDate') || getField('invoiceDate') || getField('inspectionDate') || today;
+    const filename = `${dateStr} ${docTypeLabel}${supplier ? ' (' + supplier + ')' : ''}.jpg`;
+
+    // Upload image (blob from capturePages[0])
+    const imgFile = new File([capturePages[0].blob], filename, { type: 'image/jpeg' });
+    const imgFileId = await uploadFileToDrive(imgFile, docsFolderId, filename);
+
+    // Upload JSON sidecar
+    const sidecarData = JSON.stringify({ documentType: docType, extractedAt: new Date().toISOString(), extraction: captureExtracted }, null, 2);
+    const sidecarFile = new File([sidecarData], filename.replace('.jpg', '.json'), { type: 'application/json' });
+    const sidecarFileId = await uploadFileToDrive(sidecarFile, docsFolderId, sidecarFile.name);
+
+    // 2. Create Document record
+    const docRecord = {
+      id:           'd' + Date.now(),
+      assetId,
+      type:         docType === 'mot_certificate' ? 'mot' : docType === 'parts_invoice' ? 'parts-invoice' : docType === 'service_invoice' ? 'service-invoice' : 'inspection',
+      driveFileId:  imgFileId,
+      sidecarFileId,
+      extractedData: captureExtracted,
+      linkedRecordIds: [],
+      createdAt:    new Date().toISOString(),
+    };
+
+    if (!maintenanceState.documents) maintenanceState.documents = [];
+    maintenanceState.documents.push(docRecord);
+
+    // 3. Create records based on document type
+    if (docType === 'mot_certificate') {
+      const expiryDate = getField('expiryDate');
+      const odometer   = parseFloat(getField('odometerReading'));
+      const advisories = (getField('advisories') || '').split(';').map(s => s.trim()).filter(Boolean);
+
+      // Update MOT compliance record
+      if (expiryDate) {
+        const existing = state.complianceRecords.find(r => r.assetId === assetId && r.type === 'mot');
+        if (existing) {
+          existing.expiryDate = expiryDate;
+          const eventId = await upsertCalendarEvent(existing);
+          if (eventId) existing.calendarEventId = eventId;
+          docRecord.linkedRecordIds.push(existing.id);
+        } else {
+          const newRecord = {
+            id: 'c' + Date.now(), assetId, type: 'mot', expiryDate,
+            provider: 'DVSA', policyNumber: null, startDate: null,
+            reminderLeadDays: 30, cost: null, notes: '', calendarEventId: null,
+          };
+          const eventId = await upsertCalendarEvent(newRecord);
+          if (eventId) newRecord.calendarEventId = eventId;
+          state.complianceRecords.push(newRecord);
+          docRecord.linkedRecordIds.push(newRecord.id);
+        }
+      }
+
+      // Create mileage reading
+      if (!isNaN(odometer) && odometer > 0) {
+        const reading = {
+          id: 'm' + Date.now(), assetId, date: getField('testDate') || today,
+          value: odometer, source: 'mot-certificate', isEstimate: false, notes: 'From MOT certificate',
+        };
+        state.mileageReadings.push(reading);
+      }
+
+      // Create maintenance record for advisories
+      if (advisories.length > 0) {
+        const mRecord = {
+          id: 'mr' + Date.now(), assetId, date: getField('testDate') || today,
+          workCarriedOut: `MOT advisories: ${advisories.join('; ')}`,
+          outstandingAdvisories: advisories, supplier: 'DVSA',
+          cost: null, mileageAtWork: parseFloat(getField('odometerReading')) || null,
+          partsUsedText: '', sourceDocumentId: docRecord.id, createdAt: new Date().toISOString(),
+        };
+        if (!maintenanceState.maintenanceRecords) maintenanceState.maintenanceRecords = [];
+        maintenanceState.maintenanceRecords.push(mRecord);
+        docRecord.linkedRecordIds.push(mRecord.id);
+      }
+
+    } else if (docType === 'parts_invoice' || docType === 'service_invoice') {
+      const mRecord = {
+        id: 'mr' + Date.now(), assetId,
+        date: getField('invoiceDate') || today,
+        workCarriedOut: getField('workCarriedOut') || `${docTypeLabel} from ${getField('supplier') || 'supplier'}`,
+        supplier: getField('supplier'),
+        cost: parseFloat(getField('total')) || null,
+        mileageAtWork: parseFloat(getField('mileageAtService')) || null,
+        partsUsedText: '', sourceDocumentId: docRecord.id,
+        outstandingAdvisories: [], createdAt: new Date().toISOString(),
+      };
+      if (!maintenanceState.maintenanceRecords) maintenanceState.maintenanceRecords = [];
+      maintenanceState.maintenanceRecords.push(mRecord);
+      docRecord.linkedRecordIds.push(mRecord.id);
+
+      if (parseFloat(getField('mileageAtService')) > 0) {
+        state.mileageReadings.push({
+          id: 'm' + Date.now() + 1, assetId, date: getField('invoiceDate') || today,
+          value: parseFloat(getField('mileageAtService')), source: 'service-invoice',
+          isEstimate: false, notes: `From ${docTypeLabel}`,
+        });
+      }
+
+    } else if (docType === 'inspection_report') {
+      const mRecord = {
+        id: 'mr' + Date.now(), assetId,
+        date: getField('inspectionDate') || today,
+        workCarriedOut: getField('findings') || 'Inspection',
+        supplier: getField('supplier'),
+        cost: null, mileageAtWork: parseFloat(getField('mileage')) || null,
+        partsUsedText: '', sourceDocumentId: docRecord.id,
+        outstandingAdvisories: [], createdAt: new Date().toISOString(),
+      };
+      if (!maintenanceState.maintenanceRecords) maintenanceState.maintenanceRecords = [];
+      maintenanceState.maintenanceRecords.push(mRecord);
+      docRecord.linkedRecordIds.push(mRecord.id);
+    }
+
+    // 4. Save state
+    await saveToD();
+    await saveMaintenanceState();
+
+    closeCaptureModal();
+    render();
+    openAssetDetail(assetId);
+    toast('Document saved successfully.');
+
+  } catch (e) {
+    toast(`Save failed: ${e.message}`);
+    console.error(e);
+  }
+
+  btn.disabled = false; btn.textContent = 'Save all';
+}
+
+// ── Ask-Claude ────────────────────────────────────────────────────────────────
+let askPhotos = {};  // assetId -> { data, mediaType } | null
+
+function toggleAskClaude(assetId) {
+  const panel   = document.getElementById(`ask-panel-${assetId}`);
+  const toggle  = document.getElementById(`ask-toggle-${assetId}`);
+  const isOpen  = panel.style.display !== 'none';
+  panel.style.display  = isOpen ? 'none' : 'block';
+  toggle.textContent   = isOpen ? 'Expand' : 'Collapse';
+  if (!isOpen) {
+    ensureMaintenanceLoaded().then(() => renderAskHistory(assetId));
+  }
+}
+
+function renderAskHistory(assetId) {
+  const histEl = document.getElementById(`ask-history-${assetId}`);
+  if (!histEl) return;
+  const conv = (maintenanceState.conversations || {})[assetId];
+  if (!conv || !conv.messages || conv.messages.length === 0) {
+    histEl.innerHTML = '<div class="empty-state" style="padding:1.5rem;">No conversation yet. Ask a question below.</div>';
+    return;
+  }
+  histEl.innerHTML = conv.messages.map(m => `
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:${m.role==='user'?'var(--accent-hi)':'var(--text-dim)'};margin-bottom:4px;">${m.role === 'user' ? 'You' : 'Claude'} &mdash; ${m.timestamp ? m.timestamp.split('T')[0] : ''}</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.65;white-space:pre-wrap;">${typeof m.content === 'string' ? m.content : '[image + text]'}</div>
+    </div>`).join('');
+  histEl.scrollTop = histEl.scrollHeight;
+}
+
+function attachAskPhoto(event, assetId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  resizeImage(file).then(resized => {
+    askPhotos[assetId] = { data: resized.data, mediaType: resized.mediaType };
+    const preview = document.getElementById(`ask-photo-preview-${assetId}`);
+    if (preview) {
+      preview.style.display = 'block';
+      preview.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--text-dim);">
+        <img src="data:image/jpeg;base64,${resized.data.substring(0,100)}..." style="display:none;" />
+        <span>📷 Photo attached</span>
+        <button onclick="clearAskPhoto('${assetId}')" style="font-family:var(--mono);font-size:10px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-dim);cursor:pointer;">Remove</button>
+      </div>`;
+    }
+    toast('Photo attached.');
+  });
+}
+
+function clearAskPhoto(assetId) {
+  delete askPhotos[assetId];
+  const preview = document.getElementById(`ask-photo-preview-${assetId}`);
+  if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+}
+
+async function sendAsk(assetId) {
+  const inputEl = document.getElementById(`ask-input-${assetId}`);
+  const message = inputEl ? inputEl.value.trim() : '';
+  if (!message) return;
+  if (!cfg.proxyUrl) { toast('Proxy URL not set. Go to Settings.'); return; }
+
+  inputEl.value    = '';
+  inputEl.disabled = true;
+
+  await ensureMaintenanceLoaded();
+  if (!maintenanceState.conversations) maintenanceState.conversations = {};
+  if (!maintenanceState.conversations[assetId]) {
+    maintenanceState.conversations[assetId] = { messages: [], lastUpdated: new Date().toISOString() };
+  }
+
+  const conv = maintenanceState.conversations[assetId];
+  const asset = state.assets.find(a => a.id === assetId);
+  const lead  = (state.settings && state.settings.reminderLeadDays) || cfg.reminderDays;
+
+  // Build asset context
+  const assetContext = {
+    asset: asset ? {
+      name: asset.name, make: asset.make, model: asset.model, year: asset.year,
+      identifier: asset.identifier, vin: asset.vin, status: asset.status,
+      notes: asset.notes, usesHours: asset.usesHours,
+    } : {},
+    latestMileage: state.mileageReadings.filter(m => m.assetId === assetId)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null,
+    complianceRecords: state.complianceRecords.filter(r => r.assetId === assetId),
+    recentMaintenance: (maintenanceState.maintenanceRecords || [])
+      .filter(m => m.assetId === assetId)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 10),
+    documents: (maintenanceState.documents || [])
+      .filter(d => d.assetId === assetId)
+      .map(d => ({ type: d.type, createdAt: d.createdAt })),
+  };
+
+  // Add user message to history
+  conv.messages.push({ role: 'user', content: message, timestamp: new Date().toISOString() });
+  renderAskHistory(assetId);
+
+  // Show thinking indicator
+  const histEl = document.getElementById(`ask-history-${assetId}`);
+  if (histEl) {
+    histEl.innerHTML += `<div id="ask-thinking" style="padding:10px 16px;font-family:var(--mono);font-size:11px;color:var(--text-dim);font-style:italic;">Claude is thinking…</div>`;
+    histEl.scrollTop = histEl.scrollHeight;
+  }
+
+  try {
+    // Build conversation history for Anthropic (exclude system messages)
+    const history = conv.messages.slice(0, -1).map(m => ({
+      role:    m.role,
+      content: m.content,
+    }));
+
+    const photo = askPhotos[assetId] || null;
+
+    const r = await fetch(`${cfg.proxyUrl}/ask`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'x-worker-secret': cfg.workerSecret || '',
+      },
+      body: JSON.stringify({
+        assetContext,
+        conversationHistory: history,
+        userMessage: message,
+        image: photo,
+      }),
+    });
+
+    const thinking = document.getElementById('ask-thinking');
+    if (thinking) thinking.remove();
+
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || `HTTP ${r.status}`);
+    }
+
+    const result = await r.json();
+    const reply  = result.reply || 'No response received.';
+
+    conv.messages.push({ role: 'assistant', content: reply, timestamp: new Date().toISOString() });
+    conv.lastUpdated = new Date().toISOString();
+
+    if (photo) clearAskPhoto(assetId);
+
+    await saveMaintenanceState();
+    renderAskHistory(assetId);
+
+  } catch (e) {
+    const thinking = document.getElementById('ask-thinking');
+    if (thinking) thinking.remove();
+    conv.messages.push({ role: 'assistant', content: `Error: ${e.message}`, timestamp: new Date().toISOString() });
+    renderAskHistory(assetId);
+    toast(`Ask Claude failed: ${e.message}`);
+  }
+
+  if (inputEl) inputEl.disabled = false;
 }
 
 // ── Calendar helpers ─────────────────────────────────────────────────────────
@@ -2494,6 +3160,7 @@ function drawSparkline(canvasId, readings) {
 function openSettings() {
   document.getElementById('s-client-id').value     = cfg.clientId;
   document.getElementById('s-proxy-url').value     = cfg.proxyUrl;
+  document.getElementById('s-worker-secret').value = cfg.workerSecret;
   document.getElementById('s-reminder-days').value = cfg.reminderDays;
   document.getElementById('settings-modal').classList.add('open');
 }
@@ -2521,15 +3188,18 @@ function saveSettings() {
 }
 
 function saveSettingsView() {
-  const id   = document.getElementById('sv-client-id').value.trim();
-  const px   = document.getElementById('sv-proxy-url').value.trim().replace(/\/$/, '');
-  const days = parseInt(document.getElementById('sv-reminder-days').value) || 30;
+  const id     = document.getElementById('sv-client-id').value.trim();
+  const px     = document.getElementById('sv-proxy-url').value.trim().replace(/\/$/, '');
+  const secret = document.getElementById('sv-worker-secret').value.trim();
+  const days   = parseInt(document.getElementById('sv-reminder-days').value) || 30;
   if (!id) { toast('OAuth client ID is required.'); return; }
   cfg.clientId     = id;
   cfg.proxyUrl     = px;
+  cfg.workerSecret = secret;
   cfg.reminderDays = days;
   localStorage.setItem('vt_client_id',     id);
   localStorage.setItem('vt_proxy_url',     px);
+  localStorage.setItem('vt_worker_secret', secret);
   localStorage.setItem('vt_reminder_days', String(days));
   if (state.settings) state.settings.reminderLeadDays = days;
   toast('Settings saved.');
@@ -2560,7 +3230,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal'].forEach(id => {
+['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal', 'capture-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
 });
