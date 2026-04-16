@@ -2322,9 +2322,12 @@ async function startCapture(event, assetId) {
 
   if (!cfg.proxyUrl) { toast('Proxy URL not set. Go to Settings.'); return; }
 
-  captureAssetId = assetId;
-  capturePages   = [];
-  captureExtracted = null;
+  // First page of a new capture
+  if (captureAssetId !== assetId) {
+    captureAssetId   = assetId;
+    capturePages     = [];
+    captureExtracted = null;
+  }
 
   const statusEl = document.getElementById(`capture-status-${assetId}`);
   if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Resizing image…'; }
@@ -2333,17 +2336,85 @@ async function startCapture(event, assetId) {
     const resized = await resizeImage(file);
     capturePages.push(resized);
 
-    if (statusEl) statusEl.textContent = 'Sending to Claude for extraction…';
+    if (statusEl) statusEl.style.display = 'none';
 
+    // Show staging area -- let user add more pages or extract now
+    showCaptureStagingArea(assetId);
+
+  } catch (e) {
+    if (statusEl) { statusEl.textContent = `Image processing failed: ${e.message}`; }
+    toast(`Image processing failed: ${e.message}`);
+  }
+}
+
+function showCaptureStagingArea(assetId) {
+  const statusEl = document.getElementById(`capture-status-${assetId}`);
+  if (!statusEl) return;
+
+  const thumbs = capturePages.map((p, i) =>
+    `<div style="position:relative;width:60px;height:44px;border-radius:5px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;">
+      <img src="data:image/jpeg;base64,${p.data.substring(0, 200)}" style="width:100%;height:100%;object-fit:cover;" />
+      <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.5);font-family:var(--mono);font-size:8px;color:#fff;text-align:center;padding:1px;">p.${i+1}</div>
+    </div>`
+  ).join('');
+
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:6px;align-items:center;">${thumbs}</div>
+      <div style="font-size:12px;color:var(--text-dim);">${capturePages.length} page${capturePages.length !== 1 ? 's' : ''}</div>
+      ${capturePages.length < 4 ? `
+        <label style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">
+          + Add page
+          <input type="file" accept="image/*" style="display:none;" onchange="addCapturePage(event,'${assetId}')" />
+        </label>
+        <label style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">
+          📷 Add page
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="addCapturePage(event,'${assetId}')" />
+        </label>` : '<span style="font-family:var(--mono);font-size:10px;color:var(--amber);">Max 4 pages</span>'}
+      <button onclick="runExtraction('${assetId}')" style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 12px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">Extract now &rarr;</button>
+      <button onclick="cancelCapture('${assetId}')" style="font-family:var(--mono);font-size:10px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">Cancel</button>
+    </div>`;
+}
+
+async function addCapturePage(event, assetId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  const statusEl = document.getElementById(`capture-status-${assetId}`);
+  if (statusEl) statusEl.innerHTML = '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">Resizing…</span>';
+  try {
+    const resized = await resizeImage(file);
+    capturePages.push(resized);
+    showCaptureStagingArea(assetId);
+  } catch (e) {
+    toast(`Could not add page: ${e.message}`);
+    showCaptureStagingArea(assetId);
+  }
+}
+
+function cancelCapture(assetId) {
+  capturePages     = [];
+  captureAssetId   = null;
+  captureExtracted = null;
+  const statusEl = document.getElementById(`capture-status-${assetId}`);
+  if (statusEl) { statusEl.style.display = 'none'; statusEl.innerHTML = ''; }
+}
+
+async function runExtraction(assetId) {
+  if (capturePages.length === 0) return;
+  if (!cfg.proxyUrl) { toast('Proxy URL not set. Go to Settings.'); return; }
+
+  const statusEl = document.getElementById(`capture-status-${assetId}`);
+  if (statusEl) statusEl.innerHTML = '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">Sending to Claude…</span>';
+
+  try {
     const asset     = state.assets.find(a => a.id === assetId);
     const assetList = state.assets.map(a => ({ id: a.id, name: a.name, identifier: a.identifier }));
 
     const r = await fetch(`${cfg.proxyUrl}/extract`, {
       method: 'POST',
-      headers: {
-        'Content-Type':    'application/json',
-        'x-worker-secret': cfg.workerSecret || '',
-      },
+      headers: { 'Content-Type': 'application/json', 'x-worker-secret': cfg.workerSecret || '' },
       body: JSON.stringify({
         assetId,
         assetName: asset ? asset.name : '',
@@ -2360,12 +2431,12 @@ async function startCapture(event, assetId) {
     const result = await r.json();
     captureExtracted = result.extraction;
 
-    if (statusEl) statusEl.style.display = 'none';
+    if (statusEl) { statusEl.style.display = 'none'; statusEl.innerHTML = ''; }
 
     showCaptureConfirmation(assetId, captureExtracted);
 
   } catch (e) {
-    if (statusEl) { statusEl.textContent = `Extraction failed: ${e.message}`; }
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);font-family:var(--mono);font-size:11px;">Extraction failed: ${e.message}</span>`;
     toast(`Extraction failed: ${e.message}`);
   }
 }
@@ -2580,9 +2651,14 @@ async function saveCapture() {
     const dateStr  = getField('testDate') || getField('invoiceDate') || getField('inspectionDate') || today;
     const filename = `${dateStr} ${docTypeLabel}${supplier ? ' (' + supplier + ')' : ''}.jpg`;
 
-    // Upload image (blob from capturePages[0])
+    // Upload image(s) — first page as the primary, additional pages as p2, p3 etc.
     const imgFile = new File([capturePages[0].blob], filename, { type: 'image/jpeg' });
     const imgFileId = await uploadFileToDrive(imgFile, docsFolderId, filename);
+    // Upload additional pages if present
+    for (let pi = 1; pi < capturePages.length; pi++) {
+      const pageFile = new File([capturePages[pi].blob], filename.replace('.jpg', ` (page ${pi+1}).jpg`), { type: 'image/jpeg' });
+      await uploadFileToDrive(pageFile, docsFolderId, pageFile.name);
+    }
 
     // Upload JSON sidecar
     const sidecarData = JSON.stringify({ documentType: docType, extractedAt: new Date().toISOString(), extraction: captureExtracted }, null, 2);
@@ -2732,6 +2808,8 @@ async function saveCapture() {
     await saveToD();
     await saveMaintenanceState();
 
+    capturePages   = [];
+    captureAssetId = null;
     closeCaptureModal();
     render();
     openAssetDetail(assetId);
