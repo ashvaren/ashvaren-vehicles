@@ -994,6 +994,20 @@
   </div>
 </div>
 
+<!-- DOCUMENT DETAIL MODAL -->
+<div class="modal-overlay" id="doc-detail-modal">
+  <div class="modal" style="max-width:600px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2 id="doc-detail-title">Document</h2>
+      <button onclick="document.getElementById('doc-detail-modal').classList.remove('open')" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <div id="doc-detail-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('doc-detail-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- DOCUMENT CAPTURE CONFIRMATION MODAL -->
 <div class="modal-overlay" id="capture-modal">
   <div class="modal" style="max-width:600px;">
@@ -1991,13 +2005,14 @@ function openAssetDetail(assetId) {
       if (docs.length === 0) {
         docListEl.innerHTML = '<div class="empty-state">No documents captured yet</div>';
       } else {
-        const typeLabels = { mot:'MOT Certificate','parts-invoice':'Parts Invoice','service-invoice':'Service Invoice',inspection:'Inspection Report',manual:'Manual',photo:'Photo' };
-        docListEl.innerHTML = docs.reverse().map(d => `
-          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+        const typeLabels = { mot:'MOT Certificate','parts-invoice':'Parts Invoice','service-invoice':'Service Invoice',inspection:'Inspection Report',v5c:'V5C Registration Document',insurance:'Insurance Certificate',manual:'Manual',photo:'Photo' };
+        docListEl.innerHTML = docs.slice().reverse().map(d => `
+          <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="openDocumentDetail('${d.id}')">
             <div style="flex:1;">
               <div style="font-size:13px;color:var(--text-hi);">${typeLabels[d.type] || d.type}</div>
               <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:2px;">${d.createdAt ? d.createdAt.split('T')[0] : ''}</div>
             </div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);">&rsaquo;</div>
           </div>`).join('');
       }
     }
@@ -2380,6 +2395,8 @@ function showCaptureConfirmation(assetId, extraction) {
             <option value="parts_invoice"     ${documentType==='parts_invoice'     ?'selected':''}>Parts Invoice</option>
             <option value="service_invoice"   ${documentType==='service_invoice'   ?'selected':''}>Service Invoice</option>
             <option value="inspection_report" ${documentType==='inspection_report' ?'selected':''}>Inspection Report</option>
+            <option value="v5c"              ${documentType==='v5c'              ?'selected':''}>V5C Registration Document</option>
+            <option value="insurance_certificate" ${documentType==='insurance_certificate'?'selected':''}>Insurance Certificate</option>
             <option value="unknown"           ${documentType==='unknown'           ?'selected':''}>Unknown</option>
           </select>
         </div>
@@ -2411,6 +2428,7 @@ function buildFieldRows(docType, fields) {
       </div>`);
   };
 
+  const docTypeMapped = docType === 'v5c' ? 'v5c' : docType === 'insurance_certificate' ? 'insurance' : docType;
   if (docType === 'mot_certificate') {
     addRow('VRM', 'vrm');
     addRow('Test date', 'testDate');
@@ -2438,6 +2456,22 @@ function buildFieldRows(docType, fields) {
     addRow('Mileage', 'mileage', 'number');
     addRow('Result', 'result');
     addRow('Findings', 'findings');
+  } else if (docType === 'v5c') {
+    addRow('VRM', 'vrm');
+    addRow('Make', 'make');
+    addRow('Model', 'model');
+    addRow('Colour', 'colour');
+    addRow('VIN', 'vin');
+    addRow('Engine number', 'engineNumber');
+    addRow('Registration date', 'registrationDate');
+    addRow('Keeper name', 'keeperName');
+  } else if (docType === 'insurance_certificate') {
+    addRow('Insurer', 'insurer');
+    addRow('Policy number', 'policyNumber');
+    addRow('Cover type', 'coverType');
+    addRow('Start date', 'startDate');
+    addRow('Expiry date', 'expiryDate');
+    addRow('Policyholder', 'policyholder');
   }
 
   return rows.join('');
@@ -2464,6 +2498,54 @@ function buildRecordsPreview(docType, fields, assetId) {
 function closeCaptureModal() {
   document.getElementById('capture-modal').classList.remove('open');
   captureExtracted = null;
+}
+
+function openDocumentDetail(docId) {
+  const doc = (maintenanceState.documents || []).find(d => d.id === docId);
+  if (!doc) return;
+
+  const typeLabels = {
+    mot:'MOT Certificate', 'parts-invoice':'Parts Invoice',
+    'service-invoice':'Service Invoice', inspection:'Inspection Report',
+    v5c:'V5C Registration Document', insurance:'Insurance Certificate',
+    manual:'Manual', photo:'Photo',
+  };
+
+  document.getElementById('doc-detail-title').textContent = typeLabels[doc.type] || doc.type;
+
+  const fields = doc.extractedData?.fields || {};
+  const fieldRows = Object.entries(fields)
+    .filter(([k, v]) => v !== null && v !== undefined && v !== '' && !k.startsWith('//') && !Array.isArray(v))
+    .map(([k, v]) => `
+      <tr>
+        <td style="font-family:var(--mono);font-size:10px;color:var(--text-dim);padding:6px 0;padding-right:12px;white-space:nowrap;vertical-align:top;">${k}</td>
+        <td style="font-size:13px;color:var(--text-hi);padding:6px 0;">${v}</td>
+      </tr>`).join('');
+
+  const arrayRows = Object.entries(fields)
+    .filter(([, v]) => Array.isArray(v) && v.length > 0)
+    .map(([k, v]) => `
+      <div style="margin-bottom:8px;">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;">${k}</div>
+        ${(Array.isArray(v) ? v : []).map(item => `<div style="font-size:13px;color:var(--text);padding:3px 0;border-bottom:1px solid var(--border);">${item}</div>`).join('')}
+      </div>`).join('');
+
+  const driveLink = doc.driveFileId
+    ? `<a href="https://drive.google.com/file/d/${doc.driveFileId}/view" target="_blank" style="font-family:var(--mono);font-size:10px;color:var(--accent-hi);">Open in Drive &nearr;</a>`
+    : '';
+
+  document.getElementById('doc-detail-content').innerHTML = `
+    <div style="margin-bottom:1rem;">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:4px;">Captured ${doc.createdAt ? doc.createdAt.split('T')[0] : ''} &nbsp; ${driveLink}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Confidence: ${Math.round((doc.extractedData?.confidence || 0) * 100)}%</div>
+    </div>
+    ${fieldRows ? `<table style="width:100%;border-collapse:collapse;">${fieldRows}</table>` : ''}
+    ${arrayRows ? `<div style="margin-top:1rem;">${arrayRows}</div>` : ''}
+    ${doc.linkedRecordIds && doc.linkedRecordIds.length > 0
+      ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text-dim);">${doc.linkedRecordIds.length} record${doc.linkedRecordIds.length !== 1 ? 's' : ''} created from this document</div>`
+      : ''}`;
+
+  document.getElementById('doc-detail-modal').classList.add('open');
 }
 
 async function saveCapture() {
@@ -2608,6 +2690,42 @@ async function saveCapture() {
       if (!maintenanceState.maintenanceRecords) maintenanceState.maintenanceRecords = [];
       maintenanceState.maintenanceRecords.push(mRecord);
       docRecord.linkedRecordIds.push(mRecord.id);
+    } else if (docType === 'v5c') {
+      // Update asset fields from V5C
+      const asset2 = state.assets.find(a => a.id === assetId);
+      if (asset2) {
+        if (getField('vin')         && !asset2.vin)          asset2.vin          = getField('vin');
+        if (getField('engineNumber')&& !asset2.engineNumber) asset2.engineNumber = getField('engineNumber');
+        if (getField('colour')      && !asset2.colour)       asset2.colour       = getField('colour');
+        asset2.updatedAt = new Date().toISOString();
+      }
+    } else if (docType === 'insurance_certificate') {
+      // Update or create insurance compliance record
+      const expiryDate = getField('expiryDate');
+      if (expiryDate) {
+        const existing = state.complianceRecords.find(r => r.assetId === assetId && r.type === 'insurance');
+        if (existing) {
+          existing.expiryDate    = expiryDate;
+          existing.provider      = getField('insurer') || existing.provider;
+          existing.policyNumber  = getField('policyNumber') || existing.policyNumber;
+          existing.startDate     = getField('startDate') || existing.startDate;
+          const eventId = await upsertCalendarEvent(existing);
+          if (eventId) existing.calendarEventId = eventId;
+          docRecord.linkedRecordIds.push(existing.id);
+        } else {
+          const newRecord = {
+            id: 'c' + Date.now(), assetId, type: 'insurance',
+            expiryDate, startDate: getField('startDate') || null,
+            provider: getField('insurer') || null, policyNumber: getField('policyNumber') || null,
+            reminderLeadDays: 30, cost: null, notes: getField('coverType') || '',
+            calendarEventId: null,
+          };
+          const eventId = await upsertCalendarEvent(newRecord);
+          if (eventId) newRecord.calendarEventId = eventId;
+          state.complianceRecords.push(newRecord);
+          docRecord.linkedRecordIds.push(newRecord.id);
+        }
+      }
     }
 
     // 4. Save state
@@ -3230,7 +3348,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal', 'capture-modal'].forEach(id => {
+['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal', 'capture-modal', 'doc-detail-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
 });
