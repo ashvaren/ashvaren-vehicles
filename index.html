@@ -11,6 +11,7 @@
 <title>Ashvaren — Vehicle Tracker</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23080c14'/><text x='16' y='22' text-anchor='middle' font-size='18' font-family='Georgia,serif' fill='%23b89a5a'>A</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1003,7 +1004,8 @@
     </div>
     <div id="doc-detail-content"></div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="document.getElementById('doc-detail-modal').classList.remove('open')">Close</button>
+      <button class="btn-cancel" id="doc-delete-btn" onclick="deleteDocument()" style="color:var(--red);border-color:var(--red-bg);">Delete</button>
+      <button class="btn-save" onclick="document.getElementById('doc-detail-modal').classList.remove('open')">Close</button>
     </div>
   </div>
 </div>
@@ -2284,6 +2286,30 @@ async function saveMaintenanceState() {
 }
 
 // ── Image resize helper ───────────────────────────────────────────────────────
+async function imagesToPdf(pages) {
+  // Converts array of { data (base64 jpeg), mediaType } to a PDF Blob
+  const { jsPDF } = window.jspdf;
+  let pdf = null;
+  for (let i = 0; i < pages.length; i++) {
+    const imgData = 'data:image/jpeg;base64,' + pages[i].data;
+    // Get image dimensions via Image element
+    const dims = await new Promise(res => {
+      const img = new Image();
+      img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+      img.src = imgData;
+    });
+    // Use landscape if wider than tall
+    const orient = dims.w > dims.h ? 'l' : 'p';
+    if (i === 0) {
+      pdf = new jsPDF({ orientation: orient, unit: 'px', format: [dims.w, dims.h] });
+    } else {
+      pdf.addPage([dims.w, dims.h], orient);
+    }
+    pdf.addImage(imgData, 'JPEG', 0, 0, dims.w, dims.h);
+  }
+  return pdf ? pdf.output('blob') : null;
+}
+
 function resizeImage(file, maxPx = 1600) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -2442,48 +2468,69 @@ async function runExtraction(assetId) {
 }
 
 function showCaptureConfirmation(assetId, extraction) {
-  const { documentType, confidence, fields } = extraction || {};
-  const docTypeLabel = {
-    mot_certificate:   'MOT Certificate',
-    parts_invoice:     'Parts Invoice',
-    service_invoice:   'Service Invoice',
-    inspection_report: 'Inspection Report',
-    unknown:           'Unknown document',
-  }[documentType] || documentType;
+  const { documentType, documentTypeLabel, confidence, summary, fields } = extraction || {};
+  const confPct = Math.round((confidence || 0) * 100);
+  const confCol = confPct >= 80 ? 'var(--green)' : confPct >= 50 ? 'var(--amber)' : 'var(--red)';
+  const label   = documentTypeLabel || documentType || 'Unknown document';
 
-  const confPct  = Math.round((confidence || 0) * 100);
-  const confCol  = confPct >= 80 ? 'var(--green)' : confPct >= 50 ? 'var(--amber)' : 'var(--red)';
+  // Build a clean summary of key extracted values
+  const f = fields || {};
+  const keyFacts = [
+    f.vrm           ? `VRM: ${f.vrm}` : null,
+    f.testResult    ? `Result: ${f.testResult}` : null,
+    f.expiryDate    ? `Expires: ${f.expiryDate}` : null,
+    f.odometerReading ? `Odometer: ${f.odometerReading.toLocaleString('en-GB')} ${f.odometerUnit || 'mi'}` : null,
+    (f.advisories || []).length > 0 ? `${f.advisories.length} advisory` : null,
+    f.total         ? `Total: £${f.total}` : null,
+    f.supplier      ? `Supplier: ${f.supplier}` : null,
+    f.insurer       ? `Insurer: ${f.insurer}` : null,
+    f.policyNumber  ? `Policy: ${f.policyNumber}` : null,
+    f.vin           ? `VIN: ${f.vin}` : null,
+    f.keeperName    ? `Keeper: ${f.keeperName}` : null,
+  ].filter(Boolean);
 
-  const fieldRows = buildFieldRows(documentType, fields || {});
+  const allFieldRows = buildAllFieldRows(f);
 
   document.getElementById('capture-modal-content').innerHTML = `
-    <div style="background:var(--navy);border-radius:8px;padding:12px 14px;margin-bottom:1rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <!-- Summary (always visible) -->
+    <div style="background:var(--navy);border-radius:8px;padding:14px 16px;margin-bottom:1rem;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;">
         <div>
-          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">Document type</div>
-          <select id="cm-doc-type" style="font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);border:1px solid var(--border);border-radius:6px;padding:4px 8px;">
-            <option value="mot_certificate"   ${documentType==='mot_certificate'   ?'selected':''}>MOT Certificate</option>
-            <option value="parts_invoice"     ${documentType==='parts_invoice'     ?'selected':''}>Parts Invoice</option>
-            <option value="service_invoice"   ${documentType==='service_invoice'   ?'selected':''}>Service Invoice</option>
-            <option value="inspection_report" ${documentType==='inspection_report' ?'selected':''}>Inspection Report</option>
-            <option value="v5c"              ${documentType==='v5c'              ?'selected':''}>V5C Registration Document</option>
-            <option value="insurance_certificate" ${documentType==='insurance_certificate'?'selected':''}>Insurance Certificate</option>
-            <option value="unknown"           ${documentType==='unknown'           ?'selected':''}>Unknown</option>
-          </select>
+          <div style="font-size:15px;font-weight:500;color:var(--text-hi);">${label}</div>
+          ${summary ? `<div style="font-size:12px;color:var(--text-sec);margin-top:4px;line-height:1.5;">${summary}</div>` : ''}
         </div>
-        <div style="text-align:right;">
-          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">Confidence</div>
-          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:${confCol};">${confPct}%</div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+          <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:2px;">Confidence</div>
+          <div style="font-family:var(--mono);font-size:16px;font-weight:500;color:${confCol};">${confPct}%</div>
         </div>
       </div>
+      ${keyFacts.length > 0 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">${keyFacts.map(f2 => `<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text-sec);">${f2}</span>`).join('')}</div>` : ''}
     </div>
-    <div style="margin-bottom:1rem;">${fieldRows}</div>
-    <div style="background:var(--navy);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:10px;color:var(--text-dim);">
+
+    <!-- Records preview -->
+    <div style="background:var(--navy);border-radius:8px;padding:10px 14px;margin-bottom:1rem;font-family:var(--mono);font-size:10px;color:var(--text-dim);">
       <div style="margin-bottom:4px;color:var(--text-sec);">Records that will be created or updated:</div>
-      <div id="cm-records-preview">${buildRecordsPreview(documentType, fields || {}, assetId)}</div>
+      <div id="cm-records-preview">${buildRecordsPreview(documentType, f, assetId)}</div>
+    </div>
+
+    <!-- Edit section (collapsed by default) -->
+    <div>
+      <button onclick="toggleCaptureEdit()" style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;width:100%;text-align:left;" id="capture-edit-toggle">
+        &#9660; Edit extracted fields
+      </button>
+      <div id="capture-edit-fields" style="display:none;margin-top:10px;">${allFieldRows}</div>
     </div>`;
 
+  document.getElementById('capture-save-btn').textContent = 'Save ✓';
   document.getElementById('capture-modal').classList.add('open');
+}
+
+function toggleCaptureEdit() {
+  const fields = document.getElementById('capture-edit-fields');
+  const btn    = document.getElementById('capture-edit-toggle');
+  const open   = fields.style.display !== 'none';
+  fields.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '▼ Edit extracted fields' : '▲ Hide fields';
 }
 
 function buildFieldRows(docType, fields) {
@@ -2571,7 +2618,10 @@ function closeCaptureModal() {
   captureExtracted = null;
 }
 
+let currentDocDetailId = null;
+
 function openDocumentDetail(docId) {
+  currentDocDetailId = docId;
   const doc = (maintenanceState.documents || []).find(d => d.id === docId);
   if (!doc) return;
 
@@ -2619,19 +2669,36 @@ function openDocumentDetail(docId) {
   document.getElementById('doc-detail-modal').classList.add('open');
 }
 
+async function deleteDocument() {
+  if (!currentDocDetailId) return;
+  if (!confirm('Delete this document? The Drive file will remain but the record will be removed.')) return;
+  maintenanceState.documents = (maintenanceState.documents || []).filter(d => d.id !== currentDocDetailId);
+  await saveMaintenanceState();
+  document.getElementById('doc-detail-modal').classList.remove('open');
+  // Refresh the current asset detail if open
+  const detailVisible = document.getElementById('view-asset-detail').style.display !== 'none';
+  if (detailVisible && captureAssetId) openAssetDetail(captureAssetId);
+  else render();
+  toast('Document record deleted.');
+}
+
 async function saveCapture() {
   const btn = document.getElementById('capture-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
 
-  const docType = document.getElementById('cm-doc-type').value;
   const assetId = captureAssetId;
   const asset   = state.assets.find(a => a.id === assetId);
   if (!asset) { btn.disabled = false; btn.textContent = 'Save all'; return; }
 
   const getField = (key) => {
     const el = document.getElementById(`cf-${key}`);
-    return el ? el.value.trim() : null;
+    if (!el) {
+      // Fall back to extracted data if field not in edit form
+      return captureExtracted?.fields?.[key] ?? null;
+    }
+    return el.value.trim() || null;
   };
+  const docType = captureExtracted?.documentType || 'unknown';
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -2649,16 +2716,13 @@ async function saveCapture() {
 
     const supplier = getField('supplier') || getField('vrm') || '';
     const dateStr  = getField('testDate') || getField('invoiceDate') || getField('inspectionDate') || today;
-    const filename = `${dateStr} ${docTypeLabel}${supplier ? ' (' + supplier + ')' : ''}.jpg`;
+    const filename  = `${dateStr} ${docTypeLabel}${supplier ? ' (' + supplier + ')' : ''}`;
 
-    // Upload image(s) — first page as the primary, additional pages as p2, p3 etc.
-    const imgFile = new File([capturePages[0].blob], filename, { type: 'image/jpeg' });
-    const imgFileId = await uploadFileToDrive(imgFile, docsFolderId, filename);
-    // Upload additional pages if present
-    for (let pi = 1; pi < capturePages.length; pi++) {
-      const pageFile = new File([capturePages[pi].blob], filename.replace('.jpg', ` (page ${pi+1}).jpg`), { type: 'image/jpeg' });
-      await uploadFileToDrive(pageFile, docsFolderId, pageFile.name);
-    }
+    // Convert all pages to a single PDF and upload
+    const pdfBlob = await imagesToPdf(capturePages);
+    const pdfFilename = filename.replace('.jpg', '.pdf');
+    const pdfFile = new File([pdfBlob], pdfFilename, { type: 'application/pdf' });
+    const imgFileId = await uploadFileToDrive(pdfFile, docsFolderId, pdfFilename);
 
     // Upload JSON sidecar
     const sidecarData = JSON.stringify({ documentType: docType, extractedAt: new Date().toISOString(), extraction: captureExtracted }, null, 2);
