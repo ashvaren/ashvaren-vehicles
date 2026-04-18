@@ -2467,6 +2467,43 @@ async function runExtraction(assetId) {
   }
 }
 
+function buildAllFieldRows(fields) {
+  const rows = [];
+  const skipKeys = new Set(['lineItems', 'additionalFields']);
+  const arrayKeys = new Set(['advisories', 'failures', 'recommendations']);
+
+  const addRow = (label, key, val, type) => {
+    const strVal = val !== null && val !== undefined ? String(val) : '';
+    rows.push(`
+      <div style="margin-bottom:8px;">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">${label}</div>
+        <input type="${type || 'text'}" id="cf-${key}" value="${strVal.replace(/"/g,'&quot;')}"
+          style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;" />
+      </div>`);
+  };
+
+  for (const [key, val] of Object.entries(fields)) {
+    if (skipKeys.has(key) || key.startsWith('//')) continue;
+    if (arrayKeys.has(key)) {
+      const joined = (Array.isArray(val) ? val : []).join('; ');
+      rows.push(`
+        <div style="margin-bottom:8px;">
+          <div style="font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:3px;">${key} (semicolon-separated)</div>
+          <textarea id="cf-${key}" rows="2" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;resize:vertical;">${joined}</textarea>
+        </div>`);
+      continue;
+    }
+    if (val === null || val === undefined || val === '') continue;
+    const isNum = typeof val === 'number';
+    const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+    addRow(label, key, val, isNum ? 'number' : 'text');
+  }
+
+  if (!fields.expiryDate) addRow('Expiry date', 'expiryDate', '', 'text');
+
+  return rows.join('') || '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);padding:8px 0;">No fields extracted.</div>';
+}
+
 function showCaptureConfirmation(assetId, extraction) {
   const { documentType, documentTypeLabel, confidence, summary, fields } = extraction || {};
   const confPct = Math.round((confidence || 0) * 100);
