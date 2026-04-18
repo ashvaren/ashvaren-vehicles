@@ -2747,12 +2747,19 @@ async function saveCapture() {
     const docsFolderId = await ensurePath(['Ashvaren', 'Vehicles', 'Assets', safeName, 'documents']);
 
     const docTypeLabel = {
-      mot_certificate: 'MOT Certificate', parts_invoice: 'Parts Invoice',
-      service_invoice: 'Service Invoice', inspection_report: 'Inspection Report',
-    }[docType] || 'Document';
+      mot_certificate:      'MOT Certificate',
+      parts_invoice:        'Parts Invoice',
+      service_invoice:      'Service Invoice',
+      inspection_report:    'Inspection Report',
+      v5c:                  'V5C Registration Document',
+      insurance_certificate:'Insurance Certificate',
+      sorn_confirmation:    'SORN Confirmation',
+      dating_certificate:   'Dating Certificate',
+      warranty_document:    'Warranty Document',
+    }[docType] || (captureExtracted?.documentTypeLabel || 'Document');
 
-    const supplier = getField('supplier') || getField('vrm') || '';
-    const dateStr  = getField('testDate') || getField('invoiceDate') || getField('inspectionDate') || today;
+    const supplier = getField('supplier') || getField('insurer') || '';
+    const dateStr  = getField('testDate') || getField('invoiceDate') || getField('inspectionDate') || getField('dateFirstRegistered') || getField('startDate') || today;
     const filename  = `${dateStr} ${docTypeLabel}${supplier ? ' (' + supplier + ')' : ''}`;
 
     // Convert all pages to a single PDF and upload
@@ -2770,7 +2777,7 @@ async function saveCapture() {
     const docRecord = {
       id:           'd' + Date.now(),
       assetId,
-      type:         docType === 'mot_certificate' ? 'mot' : docType === 'parts_invoice' ? 'parts-invoice' : docType === 'service_invoice' ? 'service-invoice' : 'inspection',
+      type:         docType === 'mot_certificate' ? 'mot' : docType === 'parts_invoice' ? 'parts-invoice' : docType === 'service_invoice' ? 'service-invoice' : docType === 'v5c' ? 'v5c' : docType === 'insurance_certificate' ? 'insurance' : docType === 'inspection_report' ? 'inspection' : docType,
       driveFileId:  imgFileId,
       sidecarFileId,
       extractedData: captureExtracted,
