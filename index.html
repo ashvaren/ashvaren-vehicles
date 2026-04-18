@@ -762,6 +762,26 @@
           </div>
         </div>
       </div>
+      <!-- Global document capture -->
+      <div class="panel" style="margin-bottom:1.25rem;">
+        <div class="panel-header">
+          <span class="panel-title">Capture document</span>
+          <span style="font-family:var(--mono);font-size:9px;color:var(--text-dim);">Claude will identify the vehicle and document type</span>
+        </div>
+        <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <label class="sync-btn" style="cursor:pointer;">
+            📷 Take photo
+            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="startGlobalCapture(event)" />
+          </label>
+          <label class="sync-btn" style="cursor:pointer;">
+            🖼 Upload file
+            <input type="file" accept="image/*" style="display:none;" onchange="startGlobalCapture(event)" />
+          </label>
+          <span id="global-capture-status" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);display:none;"></span>
+        </div>
+        <div id="global-capture-staging" style="display:none;padding:0 16px 12px;"></div>
+      </div>
+
       <!-- Quick actions -->
       <div class="panel" style="margin-bottom:1.25rem;">
         <div class="panel-header"><span class="panel-title">Quick actions</span></div>
@@ -991,6 +1011,22 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
       <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ASSET MATCH CONFIRMATION MODAL -->
+<div class="modal-overlay" id="asset-match-modal">
+  <div class="modal" style="max-width:480px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+      <h2>Confirm vehicle</h2>
+      <button onclick="closeAssetMatchModal()" style="font-size:18px;line-height:1;border:none;background:transparent;color:var(--text-dim);cursor:pointer;padding:0 0 0 12px;">&times;</button>
+    </div>
+    <p class="modal-subtitle" id="asset-match-subtitle">Claude identified this document. Please confirm which vehicle it belongs to.</p>
+    <div id="asset-match-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAssetMatchModal()">Cancel</button>
+      <button class="btn-save" onclick="confirmAssetMatch()">Continue &rarr;</button>
     </div>
   </div>
 </div>
@@ -3095,6 +3131,182 @@ async function sendAsk(assetId) {
   if (inputEl) inputEl.disabled = false;
 }
 
+// ── Global document capture (dashboard) ─────────────────────────────────────
+let globalCapturePages = [];
+let pendingAssetId     = null;
+let pendingExtraction  = null;
+
+async function startGlobalCapture(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  if (!cfg.proxyUrl) { toast('Proxy URL not set. Go to Settings.'); return; }
+
+  // Reset if starting fresh
+  globalCapturePages = [];
+  pendingAssetId     = null;
+  pendingExtraction  = null;
+
+  const statusEl = document.getElementById('global-capture-status');
+  const stagingEl = document.getElementById('global-capture-staging');
+  statusEl.style.display = 'inline';
+  statusEl.textContent   = 'Resizing…';
+  stagingEl.style.display = 'none';
+
+  try {
+    const resized = await resizeImage(file);
+    globalCapturePages.push(resized);
+    statusEl.style.display = 'none';
+    showGlobalStagingArea();
+  } catch (e) {
+    statusEl.textContent = `Failed: ${e.message}`;
+    toast(`Image processing failed: ${e.message}`);
+  }
+}
+
+function showGlobalStagingArea() {
+  const stagingEl = document.getElementById('global-capture-staging');
+  const thumbs = globalCapturePages.map((p, i) =>
+    `<div style="position:relative;width:60px;height:44px;border-radius:5px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;">
+      <img src="data:image/jpeg;base64,${p.data.substring(0,200)}" style="width:100%;height:100%;object-fit:cover;" />
+      <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.5);font-family:var(--mono);font-size:8px;color:#fff;text-align:center;padding:1px;">p.${i+1}</div>
+    </div>`
+  ).join('');
+
+  stagingEl.style.display = 'block';
+  stagingEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:6px;align-items:center;">${thumbs}</div>
+      <div style="font-size:12px;color:var(--text-dim);">${globalCapturePages.length} page${globalCapturePages.length !== 1 ? 's' : ''}</div>
+      ${globalCapturePages.length < 4 ? `
+        <label style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">
+          + Add page
+          <input type="file" accept="image/*" style="display:none;" onchange="addGlobalCapturePage(event)" />
+        </label>
+        <label style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">
+          📷 Add page
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="addGlobalCapturePage(event)" />
+        </label>` : ''}
+      <button onclick="runGlobalExtraction()" style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;padding:4px 12px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">Extract now &rarr;</button>
+      <button onclick="cancelGlobalCapture()" style="font-family:var(--mono);font-size:10px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-dim);cursor:pointer;">Cancel</button>
+      <span id="global-extract-status" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);display:none;"></span>
+    </div>`;
+}
+
+async function addGlobalCapturePage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  try {
+    const resized = await resizeImage(file);
+    globalCapturePages.push(resized);
+    showGlobalStagingArea();
+  } catch (e) {
+    toast(`Could not add page: ${e.message}`);
+  }
+}
+
+function cancelGlobalCapture() {
+  globalCapturePages = [];
+  pendingAssetId     = null;
+  pendingExtraction  = null;
+  const stagingEl = document.getElementById('global-capture-staging');
+  if (stagingEl) { stagingEl.style.display = 'none'; stagingEl.innerHTML = ''; }
+}
+
+async function runGlobalExtraction() {
+  if (!globalCapturePages.length) return;
+
+  const statusEl = document.getElementById('global-extract-status');
+  if (statusEl) { statusEl.style.display = 'inline'; statusEl.textContent = 'Sending to Claude…'; }
+
+  try {
+    const assetList = state.assets.map(a => ({ id: a.id, name: a.name, identifier: a.identifier }));
+
+    const r = await fetch(`${cfg.proxyUrl}/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-worker-secret': cfg.workerSecret || '' },
+      body: JSON.stringify({
+        images:    globalCapturePages.map(p => ({ data: p.data, mediaType: p.mediaType })),
+        assetList,
+      }),
+    });
+
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || `HTTP ${r.status}`);
+    }
+
+    const result = await r.json();
+    pendingExtraction = result.extraction;
+
+    if (statusEl) { statusEl.style.display = 'none'; }
+
+    const matchedId = pendingExtraction?.assetMatchById;
+    const confidence = pendingExtraction?.confidence || 0;
+
+    if (matchedId && confidence >= 0.7) {
+      // High confidence match -- go straight to confirmation
+      pendingAssetId = matchedId;
+      captureAssetId = matchedId;
+      capturePages   = globalCapturePages;
+      captureExtracted = pendingExtraction;
+      cancelGlobalCapture();
+      showCaptureConfirmation(matchedId, pendingExtraction);
+    } else {
+      // Low confidence or no match -- ask user to confirm asset
+      showAssetMatchModal(matchedId, pendingExtraction);
+    }
+
+  } catch (e) {
+    if (statusEl) { statusEl.style.display = 'none'; }
+    toast(`Extraction failed: ${e.message}`);
+  }
+}
+
+function showAssetMatchModal(suggestedAssetId, extraction) {
+  const { documentTypeLabel, summary, confidence } = extraction || {};
+  const confPct = Math.round((confidence || 0) * 100);
+
+  document.getElementById('asset-match-subtitle').textContent =
+    summary || 'Claude could not confidently match this document to a vehicle.';
+
+  const assetOptions = state.assets.map(a =>
+    `<option value="${a.id}" ${a.id === suggestedAssetId ? 'selected' : ''}>${a.name}${a.identifier ? ' — ' + a.identifier : ''}</option>`
+  ).join('');
+
+  document.getElementById('asset-match-content').innerHTML = `
+    <div style="background:var(--navy);border-radius:8px;padding:12px 14px;margin-bottom:1rem;">
+      <div style="font-size:13px;font-weight:500;color:var(--text-hi);margin-bottom:4px;">${documentTypeLabel || 'Document'}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:${confPct >= 70 ? 'var(--green)' : 'var(--amber)'};">Claude confidence: ${confPct}%</div>
+    </div>
+    <div class="field">
+      <label>Which vehicle does this document belong to?</label>
+      <select id="asset-match-select" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);color:var(--text-hi);background:var(--navy);outline:none;">
+        ${assetOptions}
+      </select>
+    </div>`;
+
+  document.getElementById('asset-match-modal').classList.add('open');
+}
+
+function closeAssetMatchModal() {
+  document.getElementById('asset-match-modal').classList.remove('open');
+  cancelGlobalCapture();
+}
+
+function confirmAssetMatch() {
+  const assetId = document.getElementById('asset-match-select').value;
+  if (!assetId) { toast('Please select a vehicle.'); return; }
+  document.getElementById('asset-match-modal').classList.remove('open');
+  pendingAssetId   = assetId;
+  captureAssetId   = assetId;
+  capturePages     = globalCapturePages;
+  captureExtracted = pendingExtraction;
+  cancelGlobalCapture();
+  showCaptureConfirmation(assetId, pendingExtraction);
+}
+
 // ── Calendar helpers ─────────────────────────────────────────────────────────
 async function ensureVehiclesCalendar() {
   if (state.settings && state.settings.calendarId) return;
@@ -3541,7 +3753,7 @@ document.addEventListener('click', function (e) {
   }
 });
 
-['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal', 'capture-modal', 'doc-detail-modal'].forEach(id => {
+['asset-modal', 'settings-modal', 'mileage-modal', 'compliance-modal', 'capture-modal', 'doc-detail-modal', 'asset-match-modal'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', e => { if (e.target.id === id) el.classList.remove('open'); });
 });
